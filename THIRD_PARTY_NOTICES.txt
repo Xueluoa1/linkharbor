@@ -1,0 +1,26 @@
+拾链使用独立进程调用以下组件。相关许可证保留在 tools 文件夹。
+
+yt-dlp 2026.10.26
+Repository: https://github.com/yt-dlp/yt-dlp
+Release: https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26
+The yt-dlp source is Unlicense; the official bundled Windows executable
+includes third-party code and is distributed under GPLv3+.
+See tools/yt-dlp-LICENSE.txt (source license), tools/FFmpeg-LICENSE.txt (GPLv3),
+and https://github.com/yt-dlp/yt-dlp/blob/2026.10.26/THIRD_PARTY_LICENSES.txt.
+The official executable includes yt-dlp-ejs.
+
+FFmpeg / FFprobe and shared DLLs
+Repository: https://github.com/yt-dlp/FFmpeg-Builds
+Build: ffmpeg-master-latest-win64-gpl-shared.zip, 2026-11-01
+Version: N-128280-ga88838af48-20261101
+Source/build recipes: https://github.com/yt-dlp/FFmpeg-Builds
+FFmpeg source: https://github.com/FFmpeg/FFmpeg/commit/a88838af48
+License: GPLv3+ for this build; see tools/FFmpeg-LICENSE.txt.
+
+Node.js v24.16.0
+Repository/source: https://github.com/nodejs/node/tree/v24.16.0
+License: MIT plus bundled third-party licenses; see tools/Node-LICENSE.txt.
+
+The yt-dlp executable and FFmpeg archive were checked against SHA-256
+digests supplied by GitHub's official release API before extraction/use.
+Local component hashes are listed in tools/SHA256SUMS.txt.

@@ -1,0 +1,43 @@
+# Local runtime binaries; retain dependency documentation and checksums.
+/tools/*
+!/tools/README.md
+!/tools/*-LICENSE.txt
+!/tools/SHA256SUMS.txt
+
+# Generated output and downloaded media.
+/build/
+/dist/
+/下载/
+/test-output/
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+*.zip
+*.7z
+*.part
+*.ytdl
+
+# Personal settings and login credentials.
+settings.json
+.env
+.env.*
+!.env.example
+*cookies*.txt
+*Cookies*.txt
+*cookie*.json
+*Cookie*.json
+*.pem
+*.key
+*.pfx
+*.log
+
+# Editor and operating-system files.
+.vs/
+.idea/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+.DS_Store
