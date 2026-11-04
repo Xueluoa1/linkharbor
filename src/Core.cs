@@ -14,11 +14,18 @@ using Microsoft.Win32.SafeHandles;
 
 namespace LinkHarbor
 {
+    public static class AppPaths
+    {
+        public static bool Installed { get { return File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "installed-mode")); } }
+        public static string SettingsFile { get { return Path.Combine(Installed ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinkHarbor") : AppDomain.CurrentDomain.BaseDirectory, "settings.json"); } }
+        public static string DefaultDownloads { get { return Path.Combine(Installed ? Environment.GetFolderPath(Environment.SpecialFolder.MyVideos) : AppDomain.CurrentDomain.BaseDirectory, Installed ? "拾链" : "下载"); } }
+    }
+
     public sealed class Settings
     {
         public string Folder { get; set; }
         public string Proxy { get; set; }
-        public Settings() { Folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "下载"); Proxy = ""; }
+        public Settings() { Folder = AppPaths.DefaultDownloads; Proxy = ""; }
     }
 
     public sealed class MediaInfo

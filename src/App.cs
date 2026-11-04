@@ -88,7 +88,7 @@ namespace LinkHarbor
         {
             diagnostics = args.Length > 0 && (args[0] == "--screenshot" || args[0] == "--smoke-test");
             engine = new Engine(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools"));
-            settingsFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+            settingsFile = AppPaths.SettingsFile;
             BuildInterface();
             LoadSettings(); ResetMedia();
             InitializeTaskUpdates();
@@ -173,6 +173,7 @@ namespace LinkHarbor
             {
                 // Proxy credentials and Cookie paths are intentionally session-only.
                 Uri u; string safeProxy = Uri.TryCreate(proxy.Text.Trim(), UriKind.Absolute, out u) && String.IsNullOrEmpty(u.UserInfo) ? proxy.Text.Trim() : "";
+                Directory.CreateDirectory(Path.GetDirectoryName(settingsFile));
                 File.WriteAllText(settingsFile, Json.Serializer().Serialize(new Settings { Folder = folder.Text, Proxy = safeProxy }), System.Text.Encoding.UTF8);
             }
             catch (Exception ex) { AppendLog("设置未能保存：" + ex.Message); }

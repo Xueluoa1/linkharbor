@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $archivePath = Join-Path $dist "LinkHarbor-v$version-Windows-x64.zip"
 if (Test-Path -LiteralPath $archivePath) { throw "Archive already exists: $archivePath. Move it aside before rebuilding." }
 $files = @('拾链下载器.exe', 'README.md', '使用说明.txt', 'AUTHOR_NOTICE.md', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'CHANGELOG.md',
-    'docs/使用教程.md', 'docs/THIRD_PARTY_SOURCES.md', 'docs/FFMPEG_BUILD_CONFIG.txt', "docs/releases/v$version.md", 'tools/README.md', 'tools/SHA256SUMS.txt')
+    'docs/使用教程.md', 'docs/安装包构建.md', 'docs/THIRD_PARTY_SOURCES.md', 'docs/FFMPEG_BUILD_CONFIG.txt', "docs/releases/v$version.md", 'tools/README.md', 'tools/SHA256SUMS.txt')
 $files += @(Get-ChildItem -LiteralPath (Join-Path $root 'tools') -Filter '*-LICENSE.txt' -File | ForEach-Object { 'tools/' + $_.Name })
 foreach ($line in Get-Content -LiteralPath (Join-Path $root 'tools/SHA256SUMS.txt')) {
     if ($line -match '^[a-fA-F0-9]{64}\s+([^\\/:]+)$') { $files += 'tools/' + $Matches[1] }

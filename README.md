@@ -4,17 +4,19 @@
 
 作者 **雪落a** · B站 ID **雪落a77** · [xueluo.online](https://xueluo.online)（我的其他 AI 开发程序）
 
-拾链基于开源项目 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，主要提供 Windows UI 适配、批量任务管理和便携化封装。把命令行能力做成解压后直接打开的程序，让解析链接、选择画质和下载更方便。音视频处理使用 FFmpeg，JavaScript 支持使用 Node.js。
+拾链基于开源项目 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，主要提供 Windows UI 适配、批量任务管理及安装/便携封装，让解析链接、选择画质和下载更方便。音视频处理使用 FFmpeg，JavaScript 支持使用 Node.js。
 
 ## 下载与使用
 
-**[下载 v1.0.1 正式便携版](https://github.com/Xueluoa1/linkharbor/releases/tag/v1.0.1)**
+**[直接下载 v1.0.1 安装包 EXE](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.1/LinkHarbor-v1.0.1-Setup.exe)**
 
-1. 推荐下载 **[完整单文件 EXE](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.1/LinkHarbor-v1.0.1-Windows-x64-Compact.exe)**，放到可写目录，直接双击。
-2. EXE 已包含 yt-dlp、FFmpeg、Node.js 和许可证；首次启动自动展开到旁边的 `拾链-v1.0.1/` 并打开程序，无需另下载 ZIP 或安装组件。以后继续双击完整 EXE，或打开该文件夹内的 `拾链下载器.exe`。
+1. 下载 **LinkHarbor-v1.0.1-Setup.exe** 并双击，选择安装位置，按需勾选“创建桌面快捷方式”。
+2. 点击“安装”，路径和快捷方式选项会替换为实际安装进度。完成后点击“启动拾链”，以后从桌面或开始菜单打开。已包含 yt-dlp、FFmpeg、Node.js 和许可证，无需另下 ZIP 或联网补组件。
 3. 粘贴视频链接，点击“解析链接”，选择画质或音频格式、保存目录，再点击“开始下载”。
 
-适用于 Windows 10/11 x64，需要 .NET Framework 4.x。完整 EXE 使用高压缩打包，展开后约 300 MiB；请保留展开的文件夹，设置及默认下载内容也在其中。完整 EXE 每次启动会校验并恢复随包组件，不覆盖个人设置或下载内容；如需自行更新引擎，请直接运行展开目录内的主程序。
+适用于 Windows 10/11 x64，需要 .NET Framework 4.x。安装包约 92 MiB，安装后约 300 MiB；为安装和临时文件保留充足空间。默认仅为当前用户安装，无需管理员权限；自选位置须有写入权限。设置保存在 `%LOCALAPPDATA%\LinkHarbor\settings.json`，默认下载到用户“视频”目录下的“拾链”文件夹。可通过 Windows 设置 → 应用 → 拾链卸载，个人设置和下载文件保留。
+
+仍可选择 **[自展开便携 EXE](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.1/LinkHarbor-v1.0.1-Windows-x64-Compact.exe)**：首次运行展开到旁边的 `拾链-v1.0.1/`，以后复用该目录；它会校验并恢复随包组件，设置和默认下载内容在展开目录中。自行更新引擎时请直接运行展开目录内的主程序。
 
 也可下载 `LinkHarbor-v1.0.1-Windows-x64.zip`，全部解压后双击其中的 `拾链下载器.exe`，保留 `tools/`。旧的 `LinkHarbor-v1.0.1.exe` 只是约 127 KiB 的界面主程序，需要另有 `tools/`。Release 自动生成的 `Source code` 是源码，不是可运行程序。
 
@@ -30,7 +32,7 @@
 - 取消全部、同名完整文件保护，以及来源允许时的断点续传。
 - 浅色工作台、可缩放布局、侧栏导航、多尺寸图标和内置网络帮助。
 
-默认下载到程序旁的 `下载/`，可更改保存位置。总进度包含下载、合并和校验；失败与取消不算完成。分离音视频通常合并为 MKV，单文件来源保留原格式。不处理频道、播放列表或进行中的直播。
+默认下载到用户“视频/拾链”（安装版）或程序旁的 `下载/`（便携版），可更改保存位置。总进度包含下载、合并和校验；失败与取消不算完成。分离音视频通常合并为 MKV，单文件来源保留原格式。不处理频道、播放列表或进行中的直播。
 
 ## 构建、验证和打包
 
@@ -39,7 +41,7 @@
 ```powershell
 git clone https://github.com/Xueluoa1/linkharbor.git
 cd linkharbor
-git checkout v1.0.1
+git checkout master
 # 从正式便携版复制完整 tools 文件夹，或按 tools/README.md 准备依赖
 .\check-tools.ps1 -VerifyHashes
 .\build.ps1
@@ -58,6 +60,8 @@ git checkout v1.0.1
 若脚本被执行策略阻止，可对单次命令使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1`，不必修改全局策略。
 
 ## 目录
+
+安装包源码位于 `packaging/Setup.cs` 和 `packaging/installer.iss`，使用与主程序共用的 WinForms 绘制控件及 Inno Setup 6.7.3。运行 `package-installer.ps1` 构建，详见 [安装包构建与验证](docs/安装包构建.md)。Release 的 `LinkHarbor-v1.0.1-Setup-Source.zip` 对应安装包补充源码；原 `v1.0.1` 标签及版本记录保持不变。
 
 | 路径 | 内容 |
 | --- | --- |

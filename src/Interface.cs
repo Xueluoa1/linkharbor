@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -330,7 +330,7 @@ namespace LinkHarbor
             var platforms=LabelAt(dialog,"国内视频：B站（哔哩哔哩）、AcFun、优酷、爱奇艺\r\n短视频与社交：抖音、小红书、微博、TikTok\r\n海外视频：YouTube（含 Shorts）、Vimeo、Dailymotion、Niconico\r\n社交视频：X / Twitter、Facebook、Instagram、Reddit\r\n回放与片段：Twitch",30,154,590,122,10,Ink,false);
             platforms.AutoEllipsis=false;
             LabelAt(dialog,"使用前请注意",30,292,590,28,12,Ink,true);
-            var notes=LabelAt(dialog,"• 用回车换行、英文 ; 或中文 ； 分隔链接；回车仅换行，点击按钮解析。\r\n• 最多 3 项并行，其余自动排队；画质、音频、保存位置统一应用。\r\n• 左侧下载图标打开任务弹窗，查看进度、速度、失败原因和保存位置。\r\n• 总进度按任务平均估算，含合并与保存；失败任务不会算作完成。\r\n• 关闭任务弹窗不停止下载；“取消全部”会停止运行及排队任务。\r\n• 重复链接自动忽略；不处理合集、频道或正在直播的内容。\r\n• 不同网站均需登录时，可分批下载并切换对应的 Cookie 文件。\r\n• 平台未逐一实测；网站改版、账号权限、地区和 DRM 可能影响下载。\r\n• 默认保存到工具旁的“下载”文件夹；批量文件名附短标识以避免重名。",30,330,590,195,9.5f,Muted,false);
+            var notes=LabelAt(dialog,"• 用回车换行、英文 ; 或中文 ； 分隔链接；回车仅换行，点击按钮解析。\r\n• 最多 3 项并行，其余自动排队；画质、音频、保存位置统一应用。\r\n• 左侧下载图标打开任务弹窗，查看进度、速度、失败原因和保存位置。\r\n• 总进度按任务平均估算，含合并与保存；失败任务不会算作完成。\r\n• 关闭任务弹窗不停止下载；“取消全部”会停止运行及排队任务。\r\n• 重复链接自动忽略；不处理合集、频道或正在直播的内容。\r\n• 不同网站均需登录时，可分批下载并切换对应的 Cookie 文件。\r\n• 平台未逐一实测；网站改版、账号权限、地区和 DRM 可能影响下载。\r\n• 默认保存到"+(AppPaths.Installed?"用户视频目录中的“拾链”文件夹":"工具旁的“下载”文件夹")+"；批量文件名附短标识以避免重名。",30,330,590,195,9.5f,Muted,false);
             notes.AutoEllipsis=false;
             var credits=LabelAt(dialog,"拾链 " + AppInfo.DisplayVersion + " · 作者：雪落a · B站 ID：雪落a77\r\n基于 yt-dlp，提供 Windows UI 适配、批量任务管理与便携封装。\r\nGPL-3.0 开源；不希望直接打包售卖，此倡议不构成额外许可限制。\r\nxueluo.online：作者使用 AI 开发的其他程序。",30,534,590,92,9,Muted,false);
             credits.AutoEllipsis=false;

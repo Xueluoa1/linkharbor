@@ -16,6 +16,14 @@ class Tests
     static void Main(string[] args) { try { Run(args).GetAwaiter().GetResult(); Console.WriteLine("ALL PASSED: " + count); } catch (Exception e) { Console.Error.WriteLine(e); Environment.Exit(1); } }
     static async Task Run(string[] args)
     {
+        Check(!AppPaths.Installed && AppPaths.SettingsFile == Path.Combine(root,"settings.json"), "portable settings stay beside program");
+        Check(new Settings().Folder == Path.Combine(root,"下载"), "portable default downloads preserved");
+        string marker = Path.Combine(root,"installed-mode");
+        try {
+            File.WriteAllText(marker,"test");
+            Check(AppPaths.Installed && AppPaths.SettingsFile == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"LinkHarbor","settings.json"), "installed settings outside application directory");
+            Check(new Settings().Folder == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),"拾链"), "installed downloads in user videos directory");
+        } finally { File.Delete(marker); }
         Check(Arguments.ValidateUrl(" https://example.com/watch?v=1&list=2 ") == "https://example.com/watch?v=1&list=2", "trim URL without losing query");
         Reject(() => Arguments.ValidateUrl("file:///C:/Windows/win.ini"), "reject local file URLs");
         Reject(() => Arguments.ValidateUrl("--exec calc.exe"), "reject option injection");

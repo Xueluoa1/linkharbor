@@ -7,6 +7,7 @@
 | yt-dlp | 2026.10.26 Windows x64 | [固定版本源码](https://github.com/yt-dlp/yt-dlp/tree/2026.10.26)、[源码归档](https://github.com/yt-dlp/yt-dlp/archive/refs/tags/2026.10.26.tar.gz)、[构建说明](https://github.com/yt-dlp/yt-dlp/tree/2026.10.26#compile)、[第三方许可证](https://github.com/yt-dlp/yt-dlp/blob/2026.10.26/THIRD_PARTY_LICENSES.txt) |
 | FFmpeg / FFprobe | N-128280-ga88838af48-20261101，win64 GPL shared | [FFmpeg 源码提交](https://github.com/FFmpeg/FFmpeg/commit/a88838af48)、[源码归档](https://github.com/FFmpeg/FFmpeg/archive/a88838af48.tar.gz)、[上游构建脚本、补丁及依赖](https://github.com/yt-dlp/FFmpeg-Builds) |
 | Node.js | v24.16.0 Windows x64 | [版本源码](https://github.com/nodejs/node/tree/v24.16.0)、[源码归档](https://nodejs.org/dist/v24.16.0/node-v24.16.0.tar.gz)、[构建说明](https://github.com/nodejs/node/blob/v24.16.0/BUILDING.md) |
+| Inno Setup（安装版） | 6.7.3 | [固定版本源码](https://github.com/jrsoftware/issrc/tree/is-6_7_3)、[官方发布](https://github.com/jrsoftware/issrc/releases/tag/is-6_7_3)、[拾链安装包构建](安装包构建.md) |
 
 yt-dlp 源码采用 Unlicense，其官方 Windows 打包程序还包含第三方代码，须按其分发说明处理 GPLv3+ 等许可。FFmpeg 本次使用 GPL 构建；Node.js 保留 MIT 及其捆绑依赖声明。许可证文件位于 `tools/`，yt-dlp 打包依赖声明一并保存在 `tools/yt-dlp-THIRD-PARTY-LICENSE.txt`。
 

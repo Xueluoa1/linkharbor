@@ -4,6 +4,12 @@ Copyright (C) 2026 雪落a；拾链自身源码采用 GPL-3.0-only，见 LICENSE
 B站 ID：雪落a77；个人网站：https://xueluo.online。
 第三方源码与构建入口详见 docs/THIRD_PARTY_SOURCES.md。
 
+Windows 安装包使用 Inno Setup 6.7.3，未修改安装引擎。
+Copyright (C) 1997-2026 Jordan Russell.
+Portions Copyright (C) 2000-2026 Martijn Laan.
+https://jrsoftware.org/ | https://github.com/jrsoftware/issrc/tree/is-6_7_3
+安装版保留 tools/InnoSetup-LICENSE.txt；构建说明见 docs/安装包构建.md。
+
 拾链使用独立进程调用以下组件。相关许可证保留在 tools 文件夹。
 
 yt-dlp 2026.10.26
