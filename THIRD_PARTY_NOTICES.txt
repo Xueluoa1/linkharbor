@@ -1,3 +1,9 @@
+拾链 v1.0.1 正式版
+Copyright (C) 2026 雪落a；拾链自身源码采用 GPL-3.0-only，见 LICENSE。
+拾链基于 yt-dlp，提供 UI 适配、任务管理与便携封装，非 yt-dlp 官方客户端。
+B站 ID：雪落a77；个人网站：https://xueluo.online。
+第三方源码与构建入口详见 docs/THIRD_PARTY_SOURCES.md。
+
 拾链使用独立进程调用以下组件。相关许可证保留在 tools 文件夹。
 
 yt-dlp 2026.10.26
@@ -6,7 +12,8 @@ Release: https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26
 The yt-dlp source is Unlicense; the official bundled Windows executable
 includes third-party code and is distributed under GPLv3+.
 See tools/yt-dlp-LICENSE.txt (source license), tools/FFmpeg-LICENSE.txt (GPLv3),
-and https://github.com/yt-dlp/yt-dlp/blob/2026.10.26/THIRD_PARTY_LICENSES.txt.
+tools/yt-dlp-THIRD-PARTY-LICENSE.txt (bundled dependencies), and
+https://github.com/yt-dlp/yt-dlp/blob/2026.10.26/THIRD_PARTY_LICENSES.txt.
 The official executable includes yt-dlp-ejs.
 
 FFmpeg / FFprobe and shared DLLs

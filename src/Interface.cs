@@ -52,7 +52,7 @@ namespace LinkHarbor
         void BuildInterface()
         {
             using(var g=CreateGraphics())uiScale=g.DpiX/96f;
-            Text="拾链 · 视频解析下载";Font=TextFont(10);ForeColor=Ink;BackColor=Color.FromArgb(170,188,224);
+            Text="拾链 " + AppInfo.DisplayVersion + " · 视频解析下载";Font=TextFont(10);ForeColor=Ink;BackColor=Color.FromArgb(170,188,224);
             FormBorderStyle=FormBorderStyle.None;AutoScaleMode=AutoScaleMode.None;Padding=new Padding(S(6));
             ClientSize=new Size(S(1180),S(748));MinimumSize=new Size(S(840),S(650));StartPosition=FormStartPosition.CenterScreen;
             var screen=Screen.FromControl(this).WorkingArea;Size=new Size(Math.Min(Width,screen.Width-S(30)),Math.Min(Height,screen.Height-S(30)));
@@ -65,7 +65,7 @@ namespace LinkHarbor
             topbar=new Panel{BackColor=Color.Transparent};surface.Controls.Add(topbar);
             var logo=ButtonAt(topbar,"",0,0,42,42,false,"link");logo.AccessibleName="拾链首页";logo.Click+=(s,e)=>Navigate("home");
             var wordmark=LabelAt(topbar,"拾链",54,2,70,27,16,Ink,true);
-            LabelAt(topbar,"LINK HARBOR",55,30,120,14,7,Muted,false).Font=new Font("Segoe UI",7,FontStyle.Bold);
+            LabelAt(topbar,AppInfo.DisplayVersion + " · 正式版",55,30,120,14,7,Muted,false);
             workflow=new WorkflowStrip{Font=TextFont(8.5f)};topbar.Controls.Add(workflow);
             var minimize=ButtonAt(topbar,"",0,0,32,32,false,"min");tips.SetToolTip(minimize,"最小化");minimize.Click+=(s,e)=>WindowState=FormWindowState.Minimized;
             var maximize=ButtonAt(topbar,"",0,0,32,32,false,"max");tips.SetToolTip(maximize,"最大化 / 还原");maximize.Click+=(s,e)=>ToggleMaximize();
@@ -323,7 +323,7 @@ namespace LinkHarbor
         void ShowHelp(){using(var dialog=CreateUsageHelp())dialog.ShowDialog(this);}
         Form CreateUsageHelp()
         {
-            var dialog=new Form{Text="拾链 · 注意与使用说明",ClientSize=new Size(S(650),S(590)),AutoScaleMode=AutoScaleMode.None,StartPosition=FormStartPosition.CenterParent,BackColor=Theme.Surface,Font=Font,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
+            var dialog=new Form{Text="拾链 " + AppInfo.DisplayVersion + " · 注意与使用说明",ClientSize=new Size(S(650),S(690)),AutoScaleMode=AutoScaleMode.None,StartPosition=FormStartPosition.CenterParent,BackColor=Theme.Surface,Font=Font,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
             LabelAt(dialog,"注意 · 支持平台与使用说明",28,22,594,38,20,Ink,true);
             LabelAt(dialog,"输入多个链接 → 点击解析 → 统一选择画质或音频 → 并行下载",30,72,590,28,10,Muted,false);
             LabelAt(dialog,"常见支持平台",30,116,590,28,12,Ink,true);
@@ -332,9 +332,12 @@ namespace LinkHarbor
             LabelAt(dialog,"使用前请注意",30,292,590,28,12,Ink,true);
             var notes=LabelAt(dialog,"• 用回车换行、英文 ; 或中文 ； 分隔链接；回车仅换行，点击按钮解析。\r\n• 最多 3 项并行，其余自动排队；画质、音频、保存位置统一应用。\r\n• 左侧下载图标打开任务弹窗，查看进度、速度、失败原因和保存位置。\r\n• 总进度按任务平均估算，含合并与保存；失败任务不会算作完成。\r\n• 关闭任务弹窗不停止下载；“取消全部”会停止运行及排队任务。\r\n• 重复链接自动忽略；不处理合集、频道或正在直播的内容。\r\n• 不同网站均需登录时，可分批下载并切换对应的 Cookie 文件。\r\n• 平台未逐一实测；网站改版、账号权限、地区和 DRM 可能影响下载。\r\n• 默认保存到工具旁的“下载”文件夹；批量文件名附短标识以避免重名。",30,330,590,195,9.5f,Muted,false);
             notes.AutoEllipsis=false;
-            var sites=ButtonAt(dialog,"查看官方完整列表",28,540,190,34,false);
+            var credits=LabelAt(dialog,"拾链 " + AppInfo.DisplayVersion + " · 作者：雪落a · B站 ID：雪落a77\r\n基于 yt-dlp，提供 Windows UI 适配、批量任务管理与便携封装。\r\nGPL-3.0 开源；不希望直接打包售卖，此倡议不构成额外许可限制。\r\nxueluo.online：作者使用 AI 开发的其他程序。",30,534,590,92,9,Muted,false);
+            credits.AutoEllipsis=false;
+            var sites=ButtonAt(dialog,"查看官方完整列表",28,640,190,34,false);
             sites.Click+=(s,e)=>OpenHelpLink(dialog,"https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md");
-            var done=ButtonAt(dialog,"知道了",482,540,140,34,true);done.Click+=(s,e)=>dialog.Close();
+            var author=ButtonAt(dialog,"作者网站",232,640,150,34,false);author.Click+=(s,e)=>OpenHelpLink(dialog,"https://xueluo.online");
+            var done=ButtonAt(dialog,"知道了",482,640,140,34,true);done.Click+=(s,e)=>dialog.Close();
             return dialog;
         }
         void ShowNote(string heading,string text,bool extension)

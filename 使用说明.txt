@@ -1,4 +1,12 @@
-拾链 · 视频解析下载
+﻿作者：雪落a | B站 ID：雪落a77
+个人网站：https://xueluo.online（我的其他 AI 开发程序）
+基于 yt-dlp，提供 UI 适配、批量任务管理与便携封装。
+采用 GPL-3.0-only；不希望直接打包售卖仅为倡议，不是附加许可限制。
+完整教程：docs/使用教程.md；作者声明：AUTHOR_NOTICE.md。
+正式版下载：https://github.com/Xueluoa1/linkharbor/releases/tag/v1.0.1
+请完整解压便携包后启动，不能只复制 EXE，必须保留 tools。
+
+拾链 v1.0.1 · 正式版 · 视频解析下载
 ===================
 
 开始使用

@@ -31,4 +31,4 @@
 
 `SHA256SUMS.txt` 描述当前本地组件，不能用于校验任意其他版本。升级组件后应重新验证下载来源、运行测试，并一起更新版本记录、许可证与校验清单。不要通过直接修改校验值来掩盖来源不明的文件。
 
-许可证文本保留为 `yt-dlp-LICENSE.txt`、`FFmpeg-LICENSE.txt` 和 `Node-LICENSE.txt`。详细分发说明沿用根目录 `THIRD_PARTY_NOTICES.txt`。
+许可证文本保留为 `yt-dlp-LICENSE.txt`、`yt-dlp-THIRD-PARTY-LICENSE.txt`、`FFmpeg-LICENSE.txt` 和 `Node-LICENSE.txt`。详细分发说明沿用根目录 `THIRD_PARTY_NOTICES.txt`。
