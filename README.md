@@ -16,9 +16,7 @@
 
 适用于 Windows 10/11 x64，需要 .NET Framework 4.x。安装包约 92 MiB，安装后约 300 MiB；为安装和临时文件保留充足空间。默认仅为当前用户安装，无需管理员权限；自选位置须有写入权限。设置保存在 `%LOCALAPPDATA%\LinkHarbor\settings.json`，默认下载到用户“视频”目录下的“拾链”文件夹。可通过 Windows 设置 → 应用 → 拾链卸载，个人设置和下载文件保留。
 
-仍可选择 **[自展开便携 EXE](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.1/LinkHarbor-v1.0.1-Windows-x64-Compact.exe)**：首次运行展开到旁边的 `拾链-v1.0.1/`，以后复用该目录；它会校验并恢复随包组件，设置和默认下载内容在展开目录中。自行更新引擎时请直接运行展开目录内的主程序。
-
-也可下载 `LinkHarbor-v1.0.1-Windows-x64.zip`，全部解压后双击其中的 `拾链下载器.exe`，保留 `tools/`。旧的 `LinkHarbor-v1.0.1.exe` 只是约 127 KiB 的界面主程序，需要另有 `tools/`。Release 自动生成的 `Source code` 是源码，不是可运行程序。
+也可下载 **[ZIP 便携包](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.1/LinkHarbor-v1.0.1-Windows-x64.zip)**，全部解压后双击其中的 `拾链下载器.exe`，保留 `tools/`。发布页只保留安装包 EXE 和压缩包，旧自展开 EXE、界面单文件 EXE 已移除。Release 自动生成的 `Source code` 是源码，不是可运行程序。文件校验值见发布页。
 
 **[完整操作教程](docs/使用教程.md)** · [离线快速说明](使用说明.txt) · [作者声明](AUTHOR_NOTICE.md) · [更新记录](CHANGELOG.md)
 
