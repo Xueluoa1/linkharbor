@@ -1,4 +1,4 @@
-﻿param([string]$Bundle = (Join-Path $PSScriptRoot 'dist/LinkHarbor-v1.0.1-Windows-x64.exe'))
+﻿param([string]$Bundle = (Join-Path $PSScriptRoot 'dist/LinkHarbor-v1.0.1-Windows-x64-Compact.exe'))
 $ErrorActionPreference = 'Stop'
 $testRoot = Join-Path $PSScriptRoot ('build/singlefile-test-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
@@ -6,9 +6,11 @@ $exe = Join-Path $testRoot '拾链完整程序.exe'
 Copy-Item -LiteralPath $Bundle -Destination $exe
 $runtime = Join-Path $testRoot '拾链-v1.0.1'
 function Expand-Bundle {
+    $timer = [Diagnostics.Stopwatch]::StartNew()
     $process = Start-Process -FilePath $exe -ArgumentList '--extract-only' -WindowStyle Hidden -PassThru
     if (-not $process.WaitForExit(120000)) { Stop-Process -Id $process.Id; throw 'Bundle extraction timed out.' }
     if ($process.ExitCode -ne 0) { throw "Bundle failed: $($process.ExitCode)" }
+    Write-Output ('Bundle check completed in {0:N1} seconds.' -f $timer.Elapsed.TotalSeconds)
 }
 function Assert-Runtime {
     foreach ($line in Get-Content -LiteralPath (Join-Path $runtime 'tools/SHA256SUMS.txt')) {

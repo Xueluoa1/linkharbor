@@ -74,34 +74,40 @@ namespace LinkHarbor
                     RejectReparsePoints(root);
                     Directory.CreateDirectory(root);
                     var assembly = Assembly.GetExecutingAssembly();
-                    using (var payload = assembly.GetManifestResourceStream("LinkHarbor.Payload.zip"))
-                    using (var archive = new ZipArchive(payload, ZipArchiveMode.Read))
-                    using (var reader = new StreamReader(assembly.GetManifestResourceStream("LinkHarbor.Payload.sha256")))
+                    ZipArchive archive = null;
+                    try
                     {
-                        string line;
-                        while ((line = reader.ReadLine()) != null)
+                        using (var reader = new StreamReader(assembly.GetManifestResourceStream("LinkHarbor.Payload.sha256")))
                         {
-                            string expected = line.Substring(0, 64);
-                            string relative = line.Substring(66);
-                            string target = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
-                            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new IOException("无效的组件路径。");
-                            RejectReparsePoints(target);
-                            if (File.Exists(target) && FileHash(target) == expected) continue;
-                            var entry = archive.GetEntry(relative);
-                            if (entry == null) throw new IOException("完整包缺少组件：" + relative);
-                            Directory.CreateDirectory(Path.GetDirectoryName(target));
-                            string temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                            try
+                            string line;
+                            while ((line = reader.ReadLine()) != null)
                             {
-                                using (var input = entry.Open())
-                                using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write)) input.CopyTo(output);
-                                if (FileHash(temporary) != expected) throw new IOException("组件校验失败：" + relative);
-                                if (File.Exists(target)) File.Replace(temporary, target, null);
-                                else File.Move(temporary, target);
+                                string expected = line.Substring(0, 64);
+                                string relative = line.Substring(66);
+                                string target = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
+                                if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new IOException("无效的组件路径。");
+                                RejectReparsePoints(target);
+                                if (File.Exists(target) && FileHash(target) == expected) continue;
+                                // Decode only when a file needs to be installed or repaired.
+                                if (archive == null)
+                                    archive = new ZipArchive(WindowsCompression.OpenPayload(assembly.GetManifestResourceStream("LinkHarbor.Payload.lzms")), ZipArchiveMode.Read);
+                                var entry = archive.GetEntry(relative);
+                                if (entry == null) throw new IOException("完整包缺少组件：" + relative);
+                                Directory.CreateDirectory(Path.GetDirectoryName(target));
+                                string temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                                try
+                                {
+                                    using (var input = entry.Open())
+                                    using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write)) input.CopyTo(output);
+                                    if (FileHash(temporary) != expected) throw new IOException("组件校验失败：" + relative);
+                                    if (File.Exists(target)) File.Replace(temporary, target, null);
+                                    else File.Move(temporary, target);
+                                }
+                                finally { if (File.Exists(temporary)) File.Delete(temporary); }
                             }
-                            finally { if (File.Exists(temporary)) File.Delete(temporary); }
                         }
                     }
+                    finally { if (archive != null) archive.Dispose(); }
                 }
                 finally { if (acquired) mutex.ReleaseMutex(); }
             }

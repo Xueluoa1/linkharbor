@@ -1,4 +1,4 @@
-﻿param([switch]$SkipBuild, [string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'))
+﻿param([switch]$SkipBuild, [string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'), [switch]$StoreOnly)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 & (Join-Path $root 'check-tools.ps1') -VerifyHashes
@@ -23,10 +23,11 @@ foreach ($file in $files) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $file) -PathType Leaf)) { throw "Missing package file: $file" }
 }
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$compression = if ($StoreOnly) { [IO.Compression.CompressionLevel]::NoCompression } else { [IO.Compression.CompressionLevel]::Optimal }
 $archive = [IO.Compression.ZipFile]::Open($archivePath, [IO.Compression.ZipArchiveMode]::Create)
 try {
     foreach ($file in $files) {
-        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $root $file), $file.Replace('\', '/'), [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $root $file), $file.Replace('\', '/'), $compression) | Out-Null
     }
 } finally { $archive.Dispose() }
 $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
