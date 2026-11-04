@@ -1,4 +1,4 @@
-﻿param([switch]$SkipBuild)
+﻿param([switch]$SkipBuild, [string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'))
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 & (Join-Path $root 'check-tools.ps1') -VerifyHashes
@@ -8,7 +8,7 @@ $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($app).ProductVersion
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid executable product version.' }
 $sourceVersion = [regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src/AssemblyInfo.cs')), 'Version = "([0-9.]+)"').Groups[1].Value
 if ($version -ne $sourceVersion) { throw 'Executable is stale; build it again before packaging.' }
-$dist = Join-Path $root 'dist'
+$dist = $OutputDirectory
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $archivePath = Join-Path $dist "LinkHarbor-v$version-Windows-x64.zip"
 if (Test-Path -LiteralPath $archivePath) { throw "Archive already exists: $archivePath. Move it aside before rebuilding." }

@@ -4,7 +4,10 @@
 采用 GPL-3.0-only；不希望直接打包售卖仅为倡议，不是附加许可限制。
 完整教程：docs/使用教程.md；作者声明：AUTHOR_NOTICE.md。
 正式版下载：https://github.com/Xueluoa1/linkharbor/releases/tag/v1.0.1
-请完整解压便携包后启动，不能只复制 EXE，必须保留 tools。
+推荐下载完整 LinkHarbor-v1.0.1-Windows-x64.exe，双击会自动展开并启动，无需另下 ZIP。
+展开的“拾链-v1.0.1”文件夹包含 tools、设置和默认下载内容，请保留。
+完整 EXE 会校验和恢复随包组件；自行更新 tools 后请直接运行展开目录内的主程序。
+如果使用 ZIP 便携包，请完整解压后启动，不能只复制其中的小 EXE，必须保留 tools。
 
 拾链 v1.0.1 · 正式版 · 视频解析下载
 ===================

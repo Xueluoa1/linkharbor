@@ -10,11 +10,13 @@
 
 **[下载 v1.0.1 正式便携版](https://github.com/Xueluoa1/linkharbor/releases/tag/v1.0.1)**
 
-1. 下载 `LinkHarbor-v1.0.1-Windows-x64.zip`，全部解压到可写目录。
-2. 双击 `拾链下载器.exe`，保留同目录的 `tools/`，无需另装 Python 或 Node.js。
+1. 推荐下载 **[完整单文件 EXE](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.1/LinkHarbor-v1.0.1-Windows-x64.exe)**，放到可写目录，直接双击。
+2. EXE 已包含 yt-dlp、FFmpeg、Node.js 和许可证；首次启动自动展开到旁边的 `拾链-v1.0.1/` 并打开程序，无需另下载 ZIP 或安装组件。以后继续双击完整 EXE，或打开该文件夹内的 `拾链下载器.exe`。
 3. 粘贴视频链接，点击“解析链接”，选择画质或音频格式、保存目录，再点击“开始下载”。
 
-适用于 Windows 10/11 x64，需要 .NET Framework 4.x。Release 页面自动生成的 `Source code` 是源码，不是便携程序；不要在压缩包内直接运行 EXE。
+适用于 Windows 10/11 x64，需要 .NET Framework 4.x。完整 EXE 约 129 MiB，展开后约 300 MiB；请保留展开的文件夹，设置及默认下载内容也在其中。完整 EXE 每次启动会校验并恢复随包组件，不覆盖个人设置或下载内容；如需自行更新引擎，请直接运行展开目录内的主程序。
+
+也可下载 `LinkHarbor-v1.0.1-Windows-x64.zip`，全部解压后双击其中的 `拾链下载器.exe`，保留 `tools/`。旧的 `LinkHarbor-v1.0.1.exe` 只是约 127 KiB 的界面主程序，需要另有 `tools/`。Release 自动生成的 `Source code` 是源码，不是可运行程序。
 
 **[完整操作教程](docs/使用教程.md)** · [离线快速说明](使用说明.txt) · [作者声明](AUTHOR_NOTICE.md) · [更新记录](CHANGELOG.md)
 
@@ -46,6 +48,8 @@ git checkout v1.0.1
 ```
 
 构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.1-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
+
+完整单文件 EXE 的构建脚本为 `package-singlefile.ps1`，启动器源码位于 `packaging/SingleFileLauncher.cs`。在仓库 `master` 分支（或 Release 的 `SingleFile-Source.zip`）运行 `.\package-singlefile.ps1 -SkipBuild`，即可生成含全部离线组件的 EXE 及独立校验文件；原 `v1.0.1` 标签保留应用初始发布源码，单文件打包补充源码单独提供。可用 `.\test-singlefile.ps1` 验证首次展开、重复启动、组件修复及设置保留。
 
 测试按核心、批量、GUI 的顺序执行，生成本地 HTTP 媒体，不依赖视频网站；GUI 测试需要桌面会话，默认超时 300 秒。可单独执行 `test-ui.ps1 -TimeoutSeconds 600` 调整。测试共用目录，不能同时运行。
 
