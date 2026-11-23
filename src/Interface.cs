@@ -109,11 +109,15 @@ namespace LinkHarbor
             var glyph=new MediaGlyph();mediaCard.Controls.Add(glyph);Place(glyph,22,51,58,58);
             mediaTitle=LabelAt(mediaCard,"等待解析视频",106,60,400,48,13,Ink,true);
             mediaMeta=LabelAt(mediaCard,"解析后显示视频标题、时长与画质",107,105,400,22,8.5f,Muted,false);
-            mode=ComboAt(mediaCard);mode.AccessibleName="下载内容";mode.Items.AddRange(new object[]{"视频 + 音频","仅音频 · 原格式","仅音频 · MP3"});mode.SelectedIndex=0;
+            mode=ComboAt(mediaCard);mode.AccessibleName="下载内容";mode.Items.AddRange(new object[]{"视频 + 音频","仅音频 · 原格式","仅音频 · MP3","AAC · M4A"});mode.SelectedIndex=0;
             quality=ComboAt(mediaCard);quality.AccessibleName="最高画质";quality.Items.Add(new Quality{Label="解析后选择画质"});quality.SelectedIndex=0;
+            videoCodec=ComboAt(mediaCard);videoCodec.AccessibleName="视频编码与封装";
+            videoCodec.Items.AddRange(new object[]{"原始编码","H.264 · MP4","H.265 · MP4","MP4 快速封装","AV1 · MP4 直下","AV1 · MP4 转码"});videoCodec.SelectedIndex=0;
+            tips.SetToolTip(videoCodec,"快速封装与 AV1 直下保留源编码。转码另存并保留原文件，耗时且有损。HDR 视频可使用原始编码。");
             modeHint=LabelAt(mediaCard,"",24,193,500,24,8,Muted,false);
-            mediaCard.Resize+=(s,e)=>{float w=mediaCard.Width/uiScale;Place(mediaChip,w-178,16,154,24);Place(mediaTitle,96,50,w-120,37);Place(mediaMeta,97,91,w-122,24);Place(mode,22,122,(w-54)/2,38);Place(quality,32+(w-54)/2,122,(w-54)/2,38);Place(modeHint,24,171,w-48,24);};
+            mediaCard.Resize+=(s,e)=>{float w=mediaCard.Width/uiScale;float col=(w-64)/3;Place(mediaChip,w-178,16,154,24);Place(mediaTitle,96,50,w-120,37);Place(mediaMeta,97,91,w-122,24);Place(mode,22,122,col,38);Place(quality,32+col,122,col,38);Place(videoCodec,42+2*col,122,col,38);Place(modeHint,24,171,w-48,24);};
             mode.SelectedIndexChanged+=(s,e)=>RefreshSelection();
+            videoCodec.SelectedIndexChanged+=(s,e)=>RefreshSelection();
 
             transferCard=MakeCard(body);
             LabelAt(transferCard,"当前任务 · 总进度",22,14,260,26,11,Ink,true);
@@ -152,7 +156,7 @@ namespace LinkHarbor
             var localBadge=LabelAt(body,"POWERED BY YT-DLP",0,0,180,24,7.5f,Muted,false);localBadge.Font=new Font("Segoe UI",7.5f);localBadge.TextAlign=ContentAlignment.MiddleRight;
             body.Resize+=(s,e)=>{Place(localBadge,body.Width/uiScale-180,body.Height/uiScale-27,180,24);};
             log=new TextBox{Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=new Font("Consolas",10),BackColor=Color.White,ForeColor=Ink,BorderStyle=BorderStyle.None,Dock=DockStyle.Fill,MaxLength=0};
-            editable.AddRange(new Control[]{url,clearLink,parse,mode,quality,browse,proxy,cookiesButton,clearCookies});
+            editable.AddRange(new Control[]{url,clearLink,parse,mode,quality,videoCodec,browse,proxy,cookiesButton,clearCookies});
             LayoutShell();LayoutWorkspace();
             Shown+=(s,e)=>{ApplyCorners();LayoutShell();LayoutWorkspace();};
         }
@@ -215,7 +219,7 @@ namespace LinkHarbor
             foreach(Control child in panel.Controls)
                 if(child.Visible && (child.Left<0||child.Top<0||child.Right>panel.Width||child.Bottom>panel.Height))
                     throw new Exception("Control outside card: "+child.GetType().Name+" / "+child.Text);
-            if(mode.Bounds.IntersectsWith(quality.Bounds)||download.Bounds.IntersectsWith(cancel.Bounds)||cookiesButton.Bounds.IntersectsWith(clearCookies.Bounds))
+            if(mode.Bounds.IntersectsWith(quality.Bounds)||quality.Bounds.IntersectsWith(videoCodec.Bounds)||download.Bounds.IntersectsWith(cancel.Bounds)||cookiesButton.Bounds.IntersectsWith(clearCookies.Bounds))
                 throw new Exception("Interactive controls overlap");
             if(helpNav.Top<topbar.Bottom||helpNav.Bottom>surface.Height)throw new Exception("Sidebar help outside window");
             if(Region==null||Region.IsVisible(0,0))throw new Exception("Rounded window region missing");

@@ -74,7 +74,7 @@ namespace LinkHarbor
         TextBox url, folder, proxy, log;
         Label mediaTitle, mediaMeta, status, detail, percent, cookieLabel, modeHint;
         Button parse, download, cancel, browse, cookiesButton, clearCookies;
-        ChoiceBox quality, mode;
+        ChoiceBox quality, mode, videoCodec;
         Meter meter;
         Panel network;
         MediaInfo media;
@@ -136,12 +136,32 @@ namespace LinkHarbor
                         url.Text = args[1]; parse.PerformClick(); await activeTask;
                         if (media == null || !download.Enabled || quality.Items.Count < 2) throw new Exception("UI parse failed: " + detail.Text);
                         mode.SelectedIndex=2;
-                        if(quality.Enabled||!download.Enabled)throw new Exception("Audio mode did not update controls");
+                        if(quality.Enabled||videoCodec.Enabled||!download.Enabled)throw new Exception("Audio mode did not update controls");
                         mode.SelectedIndex=0;
-                        if(!quality.Enabled)throw new Exception("Video mode did not restore quality selection");
+                        if(!quality.Enabled||!videoCodec.Enabled)throw new Exception("Video mode did not restore quality/codec selection");
                         download.PerformClick(); await activeTask;
                         if (status.Text != "下载完成" || !File.Exists(completedFile) || !download.Enabled || cancel.Enabled) throw new Exception("UI download failed: " + detail.Text);
+                        foreach(int codecIndex in new[]{1,2})
+                        {
+                            videoCodec.SelectedIndex=codecIndex;download.PerformClick();await activeTask;
+                            string expected=codecIndex==1?"[H264].mp4":"[H265].mp4";
+                            if(status.Text!="下载完成"||!completedFile.EndsWith(expected)||!File.Exists(completedFile)||meter.Value!=100)throw new Exception("Codec selection was not applied to batch download: "+detail.Text);
+                        }
+                        videoCodec.SelectedIndex = 3;
+                        download.PerformClick(); await activeTask;
+                        if(status.Text!="下载完成"||!Path.GetFileName(completedFile).StartsWith("[MP4 快速]")||!File.Exists(completedFile)) throw new Exception("Quick MP4 selection failed: "+jobs[0].Snapshot().Message);
+                        videoCodec.SelectedIndex = 4;
+                        download.PerformClick(); await activeTask;
+                        if(!jobs[0].Snapshot().Message.Contains("AV1 · MP4 转码")) throw new Exception("Missing AV1 guidance did not appear");
+                        videoCodec.SelectedIndex = 5;
+                        download.PerformClick(); await activeTask;
+                        if(status.Text!="下载完成"||!completedFile.EndsWith("[AV1].mp4")||!File.Exists(completedFile)) throw new Exception("AV1 conversion selection failed: "+jobs[0].Snapshot().Message);
+                        mode.SelectedIndex = 3;
+                        download.PerformClick(); await activeTask;
+                        if(videoCodec.Enabled||status.Text!="下载完成"||!completedFile.EndsWith(".m4a")||!File.Exists(completedFile)) throw new Exception("AAC/M4A selection failed: "+jobs[0].Snapshot().Message);
+                        mode.SelectedIndex = 0;
                         using (var bitmap = new Bitmap(Width, Height)) { DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size)); bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "build", "download-preview.png")); }
+                        videoCodec.SelectedIndex=0;
                         ClientSize = new Size(S(900), S(680)); PerformLayout(); workspace.PerformLayout(); LayoutWorkspace();
                         ValidateInterfaceLayout();
                         if(!(mediaCard.Top<transferCard.Top&&transferCard.Top<saveCard.Top&&saveCard.Top<networkCard.Top))throw new Exception("Compact layout did not stack cards");
@@ -153,7 +173,7 @@ namespace LinkHarbor
                         taskNav.PerformClick();
                         if(!taskNav.Selected)throw new Exception("Task navigation failed");
                         await RunBatchSmoke(new Uri(args[1]).GetLeftPart(UriPartial.Authority));
-                        File.WriteAllText(report, "PASS: rounded backgrounds, single and batch parse/download, Enter inserts newline, three parallel tasks plus queue, per-task dialog, dialog close/reopen during download, mixed failure, honest aggregate progress, cancel all, clear/reset, wide/compact layout");
+                        File.WriteAllText(report, "PASS: single and batch download, H.264/H.265/AV1 conversion, MP4 remux, AV1 fallback guidance, M4A extraction, task dialog, aggregate progress, cancellation and wide/compact layout");
                     }
                     catch (Exception ex) { File.WriteAllText(report, ex.ToString()); Environment.ExitCode = 1; }
                     finally { Close(); }
@@ -183,8 +203,11 @@ namespace LinkHarbor
         {
             mode.Enabled = !busy && media != null;
             quality.Enabled = !busy && media != null && mode.SelectedIndex == 0 && jobs.Any(j=>j.Media!=null&&j.Media.HasVideo&&j.Snapshot().State!=JobState.Duplicate);
+            videoCodec.Enabled=quality.Enabled;
             download.Enabled = !busy && jobs.Any(j=>j.Media!=null&&j.Snapshot().State!=JobState.Duplicate&&(mode.SelectedIndex==0?j.Media.HasVideo:j.Media.HasAudio));
-            modeHint.Text = mode.SelectedIndex == 0 ? "合并视频保存为 MKV；单文件保留原格式" : mode.SelectedIndex == 1 ? "保留原音频编码，避免再次压缩" : "转换为 MP3，方便在更多设备播放";
+            var audioHints = new[]{"保留原音频编码，避免再次压缩", "转换为 MP3，方便在更多设备播放", "优先直接提取 AAC 音轨，其他音轨转为 AAC"};
+            var videoHints = new[]{"原始编码：不转码，合并为 MKV，单文件保留原格式", "转为 H.264 + AAC / MP4，兼容性较好", "转为 H.265 + AAC / MP4，需要播放器支持", "直接封装源 H.264 和 AAC，保留画质与音质", "下载源站已有的 AV1，封装为 MP4", "转为 AV1 + AAC / MP4，软件转码可能较慢"};
+            modeHint.Text = mode.SelectedIndex == 0 ? videoHints[videoCodec.SelectedIndex] : audioHints[mode.SelectedIndex - 1];
         }
         void SetStatus(string title, string message) { status.Text = title; status.ForeColor = Ink; detail.Text = message; UpdateWorkflow(title); }
         void SetError(string message) { status.Text = "未能完成"; UpdateWorkflow("未能完成"); status.ForeColor = Color.FromArgb(180, 61, 50); detail.Text = message; AppendLog(message); }

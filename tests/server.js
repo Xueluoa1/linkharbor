@@ -11,7 +11,7 @@ const server = http.createServer((req, res) => {
   const file = path.join(root, slow ? 'video.mp4' : name);
   if (!name || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end('not found'); return; }
   const size = fs.statSync(file).size;
-  const mime = name.endsWith('.mpd') ? 'application/dash+xml' : name.endsWith('.mp4') ? 'video/mp4' : 'application/octet-stream';
+  const mime = name.endsWith('.mpd') ? 'application/dash+xml' : name.endsWith('.mp4') ? 'video/mp4' : name.endsWith('.webm') ? 'audio/webm' : 'application/octet-stream';
   const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
   let start = range ? Number(range[1]) : 0, end = range && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
   if (start >= size) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); res.end(); return; }

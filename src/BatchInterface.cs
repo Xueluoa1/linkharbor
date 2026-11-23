@@ -59,10 +59,11 @@ namespace LinkHarbor
         async Task DownloadMedia(CancellationToken token)
         {
             if(media==null||parsedInput!=url.Text)throw new InvalidOperationException("请先解析当前链接。");
-            string modeName=mode.SelectedIndex==0?"video":mode.SelectedIndex==1?"audio":"mp3";
+            string modeName = new[]{"video","audio","mp3","m4a"}[mode.SelectedIndex];
             var q=quality.SelectedItem as Quality;
             batchPhase="download";
-            try{await new BatchRunner(engine).DownloadAsync(jobs,folder.Text,proxy.Text,cookies,modeName,q==null?0:q.Height,token);}
+            string codec = new[]{"original","h264","h265","mp4-copy","av1-copy","av1"}[videoCodec.SelectedIndex];
+            try{await new BatchRunner(engine).DownloadAsync(jobs,folder.Text,proxy.Text,cookies,modeName,q==null?0:q.Height,token,codec);}
             finally{RefreshBatchView();batchPhase="";AppendBatchLogs();RefreshTaskDialog();}
             var views=jobs.Select(j=>j.Snapshot()).ToList();
             int done=views.Count(j=>j.State==JobState.Complete),failed=views.Count(j=>j.State==JobState.Failed),canceled=views.Count(j=>j.State==JobState.Canceled);

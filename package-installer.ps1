@@ -1,6 +1,8 @@
 ﻿param([switch]$SkipBuild, [string]$InnoCompiler = (Join-Path $PSScriptRoot 'build/inno/ISCC.exe'))
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+$version = [regex]::Match([IO.File]::ReadAllText((Join-Path $root 'src/AssemblyInfo.cs')), 'Version = "([0-9.]+)"').Groups[1].Value
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid application version.' }
 if (!(Test-Path -LiteralPath $InnoCompiler)) { throw 'Install Inno Setup 6.7.3 and pass -InnoCompiler <ISCC.exe>. See docs/安装包构建.md.' }
 if (-not $SkipBuild) { & (Join-Path $root 'build.ps1') }
 $work = Join-Path $root ('build/installer-' + [Guid]::NewGuid().ToString('N'))
@@ -13,10 +15,10 @@ $zip = Get-ChildItem -LiteralPath $work -Filter '*.zip' | Select-Object -First 1
 [IO.File]::WriteAllText((Join-Path $stage 'installed-mode'), "LinkHarbor installed edition`r`n")
 Copy-Item -LiteralPath (Join-Path (Split-Path $InnoCompiler) 'license.txt') -Destination (Join-Path $stage 'tools/InnoSetup-LICENSE.txt')
 $iss = Join-Path $root 'packaging/installer.iss'
-& $InnoCompiler "/DStageDir=$stage" "/DOutputDir=$work" $iss
+& $InnoCompiler "/DAppVersion=$version" "/DStageDir=$stage" "/DOutputDir=$work" $iss
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-$output = Join-Path $root 'dist/LinkHarbor-v1.0.1-Setup.exe'
+$output = Join-Path $root "dist/LinkHarbor-v$version-Setup.exe"
 New-Item -ItemType Directory -Force -Path (Split-Path $output) | Out-Null
 $backend = Join-Path $work 'LinkHarbor-Backend.exe'
 $sources = @('packaging/Setup.cs','src/Theme.cs','src/AssemblyInfo.cs') | ForEach-Object { Join-Path $root $_ }

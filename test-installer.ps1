@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$Backend)
+﻿param([Parameter(Mandatory=$true)][string]$Backend, [string]$PreviousBackend)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $output = Join-Path $root ('test-output/installer-' + [Guid]::NewGuid().ToString('N'))
@@ -8,6 +8,8 @@ $sources = @('tests/InstallerTests.cs','packaging/Setup.cs','src/Theme.cs','src/
 $testExe = Join-Path $output 'InstallerTests.exe'
 & $compiler /nologo /target:exe /main:InstallerTests /platform:x64 /optimize+ /codepage:65001 /r:System.Windows.Forms.dll /r:System.Drawing.dll "/resource:$Backend,backend" "/out:$testExe" $sources
 if ($LASTEXITCODE -ne 0) { throw 'Installer tests compile failed.' }
-& $testExe $output
+$testArgs = @($output)
+if ($PreviousBackend) { $testArgs += (Resolve-Path -LiteralPath $PreviousBackend).Path }
+& $testExe @testArgs
 if ($LASTEXITCODE -ne 0) { throw "Installer tests failed; inspect $output" }
 Write-Output "Installer validation: $output"

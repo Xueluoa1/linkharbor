@@ -1,6 +1,6 @@
-# 第三方组件与源码入口
+﻿# 第三方组件与源码入口
 
-拾链 v1.0.1 通过独立进程调用下列组件。组件未作二进制修改；源码库不提交第三方 EXE/DLL，便携包保留许可证。拾链 GPL-3.0-only 不替代这些组件及其依赖的许可证。
+拾链 v1.0.2 通过独立进程调用下列组件。组件未作二进制修改；源码库不提交第三方 EXE/DLL，便携包保留许可证。拾链 GPL-3.0-only 不替代这些组件及其依赖的许可证。
 
 | 组件 | 本次二进制基线 | 对应源码与构建入口 |
 | --- | --- | --- |
@@ -15,4 +15,4 @@ FFmpeg 构建的 `latest` 下载标签会变化；上述 FFmpeg 源码提交与 
 
 本次二进制报告的 FFmpeg 编译选项保存在 [FFMPEG_BUILD_CONFIG.txt](FFMPEG_BUILD_CONFIG.txt)，便于识别启用的第三方组件。
 
-拾链自身 v1.0.1 源码、构建脚本和许可随 Git 标签及 Release 源码包提供：[v1.0.1](https://github.com/Xueluoa1/linkharbor/tree/v1.0.1)。
+拾链自身 v1.0.2 源码、构建脚本和许可随 Git 标签及 Release 源码包提供：[v1.0.2](https://github.com/Xueluoa1/linkharbor/tree/v1.0.2)。

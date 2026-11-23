@@ -26,6 +26,7 @@ namespace LinkHarbor
         readonly Dictionary<string,double> streams=new Dictionary<string,double>();
         readonly JobView view;
         int streamCount=1;
+        bool converting;
         public MediaInfo Media {get;private set;}
         public BatchJob(int number,string url){view=new JobView{Number=number,Url=url,Title=url,Message="等待解析",Log="",File="",State=JobState.Waiting};}
         public JobView Snapshot()
@@ -35,8 +36,11 @@ namespace LinkHarbor
         public void SetState(JobState state,string message)
         {lock(sync){view.State=state;view.Message=message;if(state!=JobState.Downloading){view.Speed=0;view.Eta=0;}}}
         public void Parsed(MediaInfo media){lock(sync){Media=media;view.Title=media.Title;view.State=JobState.Ready;view.Message="解析完成，等待下载";}}
-        public void ResetDownload()
-        {lock(sync){streams.Clear();streamCount=1;view.Progress=0;view.Speed=0;view.Bytes=0;view.Total=0;view.Eta=0;view.File="";view.State=JobState.Queued;view.Message="等待下载名额";}}
+        public void ResetDownload(bool convert=false)
+        {lock(sync){converting=convert;streams.Clear();streamCount=1;view.Progress=0;view.Speed=0;view.Bytes=0;view.Total=0;view.Eta=0;view.File="";view.State=JobState.Queued;view.Message="等待下载名额";}}
+        public void ConversionProgress(double fraction,string codec)
+        {lock(sync){view.State=JobState.Processing;view.Progress=Math.Max(view.Progress,80+19*Math.Max(0,Math.Min(1,fraction)));view.Speed=0;view.Eta=0;view.Message="正在转为 "+codec+" · "+Math.Floor(fraction*100)+"%（原始下载文件保留）";}}
+        public void ConvertedFile(string path){lock(sync)view.File=path;}
         public void AppendLog(string line)
         {lock(sync){if(view.Log.Length>60000)view.Log=view.Log.Substring(view.Log.Length-40000);view.Log+=line+Environment.NewLine;}}
         public void ApplyLine(string line)
@@ -63,7 +67,8 @@ namespace LinkHarbor
                         double fraction=finished?1:view.Total>0?Math.Min(1,view.Bytes/view.Total):0;
                         double previous;streams.TryGetValue(key,out previous);streams[key]=Math.Max(previous,fraction);
                         // Keep room for merging and final file validation; audio starts a new stream.
-                        view.Progress=Math.Max(view.Progress,Math.Min(95,95*streams.Values.Sum()/Math.Max(streamCount,streams.Count)));
+                        double budget=converting?80:95;
+                        view.Progress=Math.Max(view.Progress,Math.Min(budget,budget*streams.Values.Sum()/Math.Max(streamCount,streams.Count)));
                         view.State=finished?JobState.Processing:JobState.Downloading;
                         view.Message=finished?"媒体流已下载，等待后续处理":"正在下载媒体流";
                     }
@@ -71,8 +76,8 @@ namespace LinkHarbor
                     return;
                 }
                 AppendLog(line);
-                if(line.StartsWith("[Merger]")||line.StartsWith("[ExtractAudio]")||line.StartsWith("[Fixup"))
-                {view.State=JobState.Processing;view.Progress=Math.Max(view.Progress,95);view.Speed=0;view.Eta=0;view.Message="正在合并 / 转换";}
+                if(line.StartsWith("[Merger]")||line.StartsWith("[ExtractAudio]")||line.StartsWith("[VideoRemuxer]")||line.StartsWith("[Fixup"))
+                {view.State=JobState.Processing;view.Progress=Math.Max(view.Progress,converting?80:95);view.Speed=0;view.Eta=0;view.Message="正在合并 / 转换";}
             }
         }
         public void Complete()
@@ -107,27 +112,51 @@ namespace LinkHarbor
             foreach(var job in jobs.Where(j=>j.Media!=null))
                 if(!identities.Add(job.Media.Identity))job.SetState(JobState.Duplicate,"与本批次另一条链接指向同一视频，已跳过");
         }
-        public async Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string cookies,string mode,int height,CancellationToken token)
+        public async Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string cookies,string mode,int height,CancellationToken token,string codec="original")
         {
+            bool video = mode == "video";
+            bool convert = video && (codec == "h264" || codec == "h265" || codec == "av1");
+            bool direct = video && (codec == "mp4-copy" || codec == "av1-copy");
+            if (video && !convert && !direct && codec != "original") throw new ArgumentException("不支持的视频编码");
             Directory.CreateDirectory(folder);
             var selected=jobs.Where(j=>j.Media!=null&&j.Snapshot().State!=JobState.Duplicate).ToList();
-            foreach(var job in selected)job.ResetDownload();
+            foreach(var job in selected)job.ResetDownload(convert);
             await RunLimited(selected,async job=>
             {
                 if(mode=="video"?!job.Media.HasVideo:!job.Media.HasAudio)throw new InvalidOperationException("此视频没有所选的媒体类型，请更改下载内容后重试。");
                 job.SetState(JobState.Downloading,"正在连接下载源");
                 using(var copy=new CookieCopy(cookies))
                 {
-                    var args=Arguments.Download(engine.ToolsPath,job.Media,folder,proxy,copy.Path,mode,height);
+                    var args=Arguments.Download(engine.ToolsPath,job.Media,folder,proxy,copy.Path,mode,height,codec);
                     if(jobs.Count>1)
                     {
                         // Distinct links can have the same title/id. Keep parallel output paths isolated.
                         string key;
                         using(var sha=SHA256.Create())key=BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(job.Media.Url))).Replace("-","").Substring(0,12);
-                        args[args.IndexOf("-o")+1]="["+key+"] %(title)s [%(id)s].%(ext)s";
+                        int templateIndex = args.IndexOf("-o") + 1;
+                        args[templateIndex] = "[" + key + "] " + args[templateIndex];
                     }
                     var result=await engine.Run(args,token,job.ApplyLine,false);
-                    if(result.Code!=0)throw new InvalidOperationException(result.Error);
+                    if (result.Code != 0)
+                    {
+                        if (direct && result.Error.IndexOf("requested format is not available", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            job.AppendLog(result.Error);
+                            throw new InvalidOperationException(codec == "av1-copy"
+                                ? "当前画质没有可用的原生 AV1 组合。可更换画质或手动选择“AV1 · MP4 转码”。"
+                                : "当前画质没有可用的 H.264 / AAC 组合。可更换画质或选择“H.264 · MP4”转码。");
+                        }
+                        throw new InvalidOperationException(result.Error);
+                    }
+                    if (direct || mode == "m4a")
+                        await VideoConversion.ValidateDirectOutput(engine, job.Snapshot().File, mode == "m4a" ? "m4a" : codec, token);
+                    if(convert)
+                    {
+                        string source=job.Snapshot().File;
+                        string label = codec == "av1" ? "AV1" : codec == "h264" ? "H.264" : "H.265";
+                        string converted=await VideoConversion.ConvertAsync(engine,source,codec,token,fraction=>job.ConversionProgress(fraction,label),job.AppendLog);
+                        job.ConvertedFile(converted);
+                    }
                     job.Complete();
                 }
             },token);
@@ -163,6 +192,84 @@ namespace LinkHarbor
                 catch{if(File.Exists(target))File.Delete(target);throw;}
             }
             public void Dispose(){if(Path.Length>0)try{File.Delete(Path);}catch{}}
+        }
+    }
+
+    public static class VideoConversion
+    {
+        public static async Task<string> ConvertAsync(Engine engine,string source,string codec,CancellationToken token,Action<double> progress,Action<string> log)
+        {
+            if(codec!="h264"&&codec!="h265"&&codec!="av1")throw new ArgumentException("请选择 H.264、H.265 或 AV1");
+            if(String.IsNullOrEmpty(source)||!File.Exists(source))throw new IOException("找不到待转换的下载文件");
+            var input=await Probe(engine,source,token);
+            var streams=((IEnumerable)input["streams"]).Cast<object>().OfType<Dictionary<string,object>>().ToList();
+            var video=streams.FirstOrDefault(s=>Json.Text(s,"codec_type")=="video");
+            if(video==null)throw new InvalidOperationException("文件不包含视频流，无法转换视频编码");
+            if(new[]{"smpte2084","arib-std-b67"}.Contains(Json.Text(video,"color_transfer")))
+                throw new InvalidOperationException("此视频为 HDR。为避免颜色失真，请选择“原始编码”；已下载的原文件保留。");
+            double duration=0;object format;
+            if(input.TryGetValue("format",out format))duration=Json.Number((Dictionary<string,object>)format,"duration");
+            string target=Path.Combine(Path.GetDirectoryName(source),Path.GetFileNameWithoutExtension(source)+" ["+codec.ToUpperInvariant()+"].mp4");
+            string expected = codec == "h265" ? "hevc" : codec;
+            if(File.Exists(target))
+            {
+                await Validate(engine,target,expected,streams.Any(s=>Json.Text(s,"codec_type")=="audio"),token);
+                log("已有对应编码文件，跳过转换："+target);return target;
+            }
+            string temporary=Path.Combine(Path.GetDirectoryName(source),".linkharbor-"+Guid.NewGuid().ToString("N")+".mp4");
+            try
+            {
+                progress(0);log("保留原文件："+source);
+                var args = new List<string>{"-hide_banner","-nostdin","-n","-loglevel","error","-i",source,"-map","0:v:0","-map","0:a:0?","-vf","scale=trunc(iw/2)*2:trunc(ih/2)*2","-pix_fmt","yuv420p","-threads","2","-c:a","aac","-b:a","192k","-movflags","+faststart","-progress","pipe:1","-nostats"};
+                if (codec == "av1") args.AddRange(new[]{"-c:v","libaom-av1","-cpu-used","6","-crf","30","-b:v","0","-row-mt","1"});
+                else args.AddRange(new[]{"-c:v",codec=="h264"?"libx264":"libx265","-preset","medium","-crf",codec=="h264"?"20":"24"});
+                if(codec=="h265")args.AddRange(new[]{"-tag:v","hvc1","-x265-params","pools=2:frame-threads=2:log-level=error"});
+                args.Add(temporary);
+                var result=await engine.RunTool("ffmpeg.exe",args,token,line=>
+                {
+                    if(line.StartsWith("out_time_us="))
+                    {double elapsed;if(duration>0&&Double.TryParse(line.Substring(12),System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out elapsed))progress(Math.Min(1,elapsed/1000000/duration));}
+                    else if(!line.Contains("="))log(line);
+                },false);
+                if(result.Code!=0)throw new InvalidOperationException("视频转码失败，原文件保留。\r\n"+result.Error);
+                await Validate(engine,temporary,expected,streams.Any(s=>Json.Text(s,"codec_type")=="audio"),token);
+                token.ThrowIfCancellationRequested();File.Move(temporary,target);return target;
+            }
+            finally{if(File.Exists(temporary))try{File.Delete(temporary);}catch{}}
+        }
+        public static async Task ValidateDirectOutput(Engine engine, string file, string format, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(file) || !File.Exists(file)) throw new IOException("找不到下载后的文件");
+            var data = await Probe(engine, file, token);
+            var streams = ((IEnumerable)data["streams"]).Cast<object>().OfType<Dictionary<string,object>>().ToList();
+            var video = streams.FirstOrDefault(s => Json.Text(s,"codec_type") == "video");
+            var audio = streams.FirstOrDefault(s => Json.Text(s,"codec_type") == "audio");
+            string audioCodec = audio == null ? "" : Json.Text(audio,"codec_name");
+            var container = (Dictionary<string,object>)data["format"];
+            bool mp4Family = Json.Text(container, "format_name").Split(',').Contains("mp4");
+            if (format == "m4a")
+            {
+                if (mp4Family && video == null && audioCodec == "aac" && file.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase)) return;
+                throw new IOException("下载文件未通过 AAC / M4A 校验，请检查任务详情。");
+            }
+            bool av1 = format == "av1-copy";
+            string expectedVideo = av1 ? "av1" : "h264";
+            bool audioMatches = audio == null || audioCodec == "aac" || (av1 && audioCodec == "opus");
+            if (mp4Family && file.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) && video != null && Json.Text(video,"codec_name") == expectedVideo && audioMatches) return;
+            throw new IOException(av1 ? "源文件不符合 AV1 直下要求，可尝试“AV1 · MP4 转码”。" : "源文件不符合 H.264 / AAC 快速封装要求，可尝试“H.264 · MP4”转码。");
+        }
+        static async Task<Dictionary<string,object>> Probe(Engine engine,string file,CancellationToken token)
+        {
+            var result=await engine.RunTool("ffprobe.exe",new List<string>{"-v","error","-show_entries","stream=codec_type,codec_name,color_transfer:format=duration,format_name","-of","json",file},token,null,true);
+            if(result.Code!=0)throw new IOException("无法检查视频文件："+result.Error);
+            return Json.Parse(result.Output);
+        }
+        static async Task Validate(Engine engine,string file,string codec,bool audio,CancellationToken token)
+        {
+            var data=await Probe(engine,file,token);
+            var streams=((IEnumerable)data["streams"]).Cast<object>().OfType<Dictionary<string,object>>().ToList();
+            if(!streams.Any(s=>Json.Text(s,"codec_type")=="video"&&Json.Text(s,"codec_name")==codec)||audio&&!streams.Any(s=>Json.Text(s,"codec_type")=="audio"&&Json.Text(s,"codec_name")=="aac"))
+                throw new IOException("目标文件编码校验不通过。原文件保留；若同名转换文件已存在，请先移走它再重试。");
         }
     }
 }

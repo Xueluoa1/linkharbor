@@ -31,7 +31,16 @@ class InstallerTests
             using (var key = Registry.CurrentUser.OpenSubKey(Key)) Check(key == null,"cancel leaves no uninstall registration");
             Check(!File.Exists(desktop) && !File.Exists(start),"cancel leaves no shortcuts");
             string target = Path.Combine(root,"installed 拾链");
+            string upgradeSentinel = Path.Combine(target,"upgrade-user-file.txt");
+            if (args.Length > 1) {
+                using (var p = Process.Start(new ProcessStartInfo(args[1],"/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /TASKS=\"\" /DIR=\""+target+"\"") { UseShellExecute = false })) { Check(p.WaitForExit(180000) && p.ExitCode == 0,"previous version installs for upgrade test"); }
+                using (var key = Registry.CurrentUser.OpenSubKey(Key)) Check(key != null && (string)key.GetValue("DisplayVersion") != AppInfo.Version,"upgrade starts from older registered version");
+                File.WriteAllText(upgradeSentinel,"keep upgrade data");
+            }
             Install(target,false,false);
+            using (var key = Registry.CurrentUser.OpenSubKey(Key)) Check(key != null && (string)key.GetValue("DisplayVersion") == AppInfo.Version,"registered version matches application version");
+            Check(FileVersionInfo.GetVersionInfo(Path.Combine(target,"拾链下载器.exe")).ProductVersion == AppInfo.Version,"installed application version matches release");
+            if (args.Length > 1) Check(File.ReadAllText(upgradeSentinel) == "keep upgrade data","upgrade preserves existing user files");
             Check(File.Exists(Path.Combine(target,"installed-mode")),"installed data mode marker");
             Check(File.Exists(Path.Combine(target,"tools","ffmpeg.exe")) && File.Exists(Path.Combine(target,"tools","yt-dlp.exe")),"full offline components installed");
             Check(!File.Exists(desktop) && File.Exists(start),"desktop opt-out and start-menu shortcut");

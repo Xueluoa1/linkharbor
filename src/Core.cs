@@ -143,7 +143,7 @@ namespace LinkHarbor
             var a = Common(tools, proxy, cookies);
             a.AddRange(new[] { "--dump-single-json", "--skip-download", "--playlist-items", "1", "--", ValidateUrl(url) }); return a;
         }
-        public static List<string> Download(string tools, MediaInfo info, string folder, string proxy, string cookies, string mode, int height)
+        public static List<string> Download(string tools, MediaInfo info, string folder, string proxy, string cookies, string mode, int height, string codec = "original")
         {
             if (String.IsNullOrWhiteSpace(folder) || !Path.IsPathRooted(folder)) throw new ArgumentException("请选择完整的本地保存路径。");
             var a = Common(tools, proxy, cookies);
@@ -151,11 +151,33 @@ namespace LinkHarbor
             a.AddRange(new[]{"--print","before_dl:__STREAMS__%(requested_formats)j"});
             if (mode == "mp3") a.AddRange(new[] { "-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0" });
             else if (mode == "audio") a.AddRange(new[] { "-f", "ba/b", "-x" });
+            else if (mode == "m4a")
+            {
+                const string aac = "[acodec~='^(aac|mp4a[.]40)([.]|$)']";
+                a.AddRange(new[] { "-f", "ba" + aac + "/b" + aac + "/ba/b", "-x", "--audio-format", "m4a", "--audio-quality", "0" });
+                a[a.IndexOf("-o") + 1] = "[AAC] " + a[a.IndexOf("-o") + 1];
+            }
             else
             {
                 string filter = height > 0 ? "[height<=" + height.ToString(CultureInfo.InvariantCulture) + "]" : "";
-                // Prefer best resolution; MKV can contain all common YouTube video/audio codecs.
-                a.AddRange(new[] { "-f", "bv*" + filter + "+ba/b" + filter + "/bv" + filter, "--merge-output-format", "mkv" });
+                if (codec == "mp4-copy" || codec == "av1-copy")
+                {
+                    bool av1 = codec == "av1-copy";
+                    string video = av1 ? "[vcodec~='^(av01|av1)([.]|$)']" : "[vcodec~='^(avc[13]?|h264)([.]|$)']";
+                    const string aac = "[acodec~='^(aac|mp4a[.]40)([.]|$)']";
+                    const string opus = "[acodec^=opus]";
+                    string single = "b" + video + filter;
+                    string separate = "bv" + video + filter;
+                    string format = separate + "+ba" + aac + "/" + single + aac;
+                    if (av1) format += "/" + separate + "+ba" + opus + "/" + single + opus;
+                    if (!info.HasAudio) format += "/" + separate;
+                    // MP4 direct links may omit codec metadata. Probe downloaded streams before reporting success.
+                    format += "/b[ext=mp4]" + filter + video.Replace("~=", "~=?") + aac.Replace("~=", "~=?");
+                    a.AddRange(new[] { "-f", format, "--merge-output-format", "mp4", "--remux-video", "mp4" });
+                    a[a.IndexOf("-o") + 1] = (av1 ? "[AV1 直下] " : "[MP4 快速] ") + a[a.IndexOf("-o") + 1];
+                }
+                else
+                    a.AddRange(new[] { "-f", "bv*" + filter + "+ba/b" + filter + "/bv" + filter, "--merge-output-format", "mkv" });
             }
             a.AddRange(new[] { "--", info.Url }); return a;
         }
@@ -178,7 +200,10 @@ namespace LinkHarbor
                 if (!File.Exists(Path.Combine(ToolsPath, file))) throw new FileNotFoundException("缺少组件 tools\\" + file + "。请保留整个工具文件夹，不要单独移动启动程序。");
         }
         public Task<RunResult> Run(List<string> args, CancellationToken token, Action<string> onLine, bool capture)
+        { return RunTool("yt-dlp.exe",args,token,onLine,capture); }
+        public Task<RunResult> RunTool(string tool,List<string> args,CancellationToken token,Action<string> onLine,bool capture)
         {
+            if(tool!="yt-dlp.exe"&&tool!="ffmpeg.exe"&&tool!="ffprobe.exe")throw new ArgumentException("不支持的处理组件");
             return Task.Run(() =>
             {
                 token.ThrowIfCancellationRequested();
@@ -186,7 +211,7 @@ namespace LinkHarbor
                 using (var job = new ProcessJob())
                 using (var p = new Process())
                 {
-                    p.StartInfo = new ProcessStartInfo(Path.Combine(ToolsPath, "yt-dlp.exe"), String.Join(" ", args.Select(Arguments.Quote)))
+                    p.StartInfo = new ProcessStartInfo(Path.Combine(ToolsPath, tool), String.Join(" ", args.Select(Arguments.Quote)))
                     {
                         UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
                         StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory

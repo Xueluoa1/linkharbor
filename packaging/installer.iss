@@ -1,7 +1,9 @@
 ﻿#ifndef StageDir
   #error StageDir is required
 #endif
-#define AppVersion "1.0.1"
+#ifndef AppVersion
+  #error AppVersion is required (use package-installer.ps1)
+#endif
 
 [Setup]
 AppId={{B275D277-6BCF-4786-BD58-F9696BDD7F05}

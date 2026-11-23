@@ -1,10 +1,12 @@
-﻿param([string]$Bundle = (Join-Path $PSScriptRoot 'dist/LinkHarbor-v1.0.1-Windows-x64-Compact.exe'))
+﻿param([string]$Bundle)
 $ErrorActionPreference = 'Stop'
+$version = [regex]::Match([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'src/AssemblyInfo.cs')), 'Version = "([0-9.]+)"').Groups[1].Value
+if (-not $Bundle) { $Bundle = Join-Path $PSScriptRoot "dist/LinkHarbor-v$version-Windows-x64-Compact.exe" }
 $testRoot = Join-Path $PSScriptRoot ('build/singlefile-test-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $exe = Join-Path $testRoot '拾链完整程序.exe'
 Copy-Item -LiteralPath $Bundle -Destination $exe
-$runtime = Join-Path $testRoot '拾链-v1.0.1'
+$runtime = Join-Path $testRoot ('拾链-v' + [Diagnostics.FileVersionInfo]::GetVersionInfo($exe).ProductVersion)
 function Expand-Bundle {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $process = Start-Process -FilePath $exe -ArgumentList '--extract-only' -WindowStyle Hidden -PassThru
