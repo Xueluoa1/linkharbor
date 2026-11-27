@@ -226,7 +226,7 @@ namespace LinkHarbor
             footer=LabelAt(body,"本地保存  ·  原始画质  ·  自动合并音视频",2,0,600,24,8,Muted,false);
             var localBadge=LabelAt(body,"POWERED BY YT-DLP",0,0,180,24,7.5f,Muted,false);localBadge.Font=new Font("Segoe UI",7.5f);localBadge.TextAlign=ContentAlignment.MiddleRight;
             body.Resize+=(s,e)=>{Place(localBadge,body.Width/uiScale-180,body.Height/uiScale-27,180,24);};
-            log=new TextBox{Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=new Font("Consolas",10),BackColor=Color.White,ForeColor=Ink,BorderStyle=BorderStyle.None,Dock=DockStyle.Fill,MaxLength=0};
+            log=new TextBox{Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,WordWrap=true,Font=new Font("Consolas",10),BackColor=Color.White,ForeColor=Ink,BorderStyle=BorderStyle.None,Dock=DockStyle.Fill,MaxLength=0};
             editable.AddRange(new Control[]{url,clearLink,parse,mode,quality,videoCodec,browse,proxy,cookiesButton,clearCookies,bypassDomestic});
             LayoutShell();LayoutWorkspace();
             Shown+=(s,e)=>{ApplyCorners();LayoutShell();LayoutWorkspace();};
@@ -375,11 +375,24 @@ namespace LinkHarbor
         void OpenFolder(){try{Directory.CreateDirectory(folder.Text);System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe",Arguments.Quote(folder.Text)){UseShellExecute=true});}catch(Exception ex){SetError(ex.Message);}}
         void ShowLog()
         {
-            using(var viewer=new Form{Text="拾链 · 任务日志",Size=new Size(S(850),S(520)),StartPosition=FormStartPosition.CenterParent,Font=Font,BackColor=Theme.Surface,Padding=new Padding(S(22))})
+            var area=Screen.FromControl(this).WorkingArea;
+            var size=new Size(Math.Min(area.Width,Math.Max(S(850),Width)),Math.Min(area.Height,S(520)));
+            using(var viewer=new Form{Text="拾链 · 任务日志",Size=size,AutoScaleMode=AutoScaleMode.None,StartPosition=FormStartPosition.CenterParent,Font=Font,BackColor=Theme.Surface,Padding=new Padding(S(22))})
             {
                 var title=new Label{Text="任务日志",Dock=DockStyle.Top,Height=S(52),Font=TextFont(17,true),ForeColor=Ink};
                 var close= new SoftButton{Text="关闭",Dock=DockStyle.Bottom,Height=S(40),Font=TextFont(10),Primary=true};close.Click+=(s,e)=>viewer.Close();
-                viewer.Controls.Add(log);viewer.Controls.Add(title);viewer.Controls.Add(close);viewer.FormClosing+=(s,e)=>viewer.Controls.Remove(log);viewer.ShowDialog(this);
+                viewer.Controls.Add(log);viewer.Controls.Add(title);viewer.Controls.Add(close);
+                viewer.Load+=(s,e)=>{
+                    int lines=log.GetLineFromCharIndex(log.TextLength)+1;
+                    int needed=viewer.Height-log.ClientSize.Height+lines*log.Font.Height+S(8);
+                    int height=Math.Min(area.Height,Math.Max(viewer.Height,needed));
+                    int x=Math.Max(area.Left,Math.Min(Left+(Width-viewer.Width)/2,area.Right-viewer.Width));
+                    int y=Math.Max(area.Top,Math.Min(Top+(Height-height)/2,area.Bottom-height));
+                    viewer.SetBounds(x,y,viewer.Width,height);
+                    log.Select(0,0);
+                    log.ScrollToCaret();
+                };
+                viewer.FormClosing+=(s,e)=>viewer.Controls.Remove(log);viewer.ShowDialog(this);
             }
         }
         void ShowNetworkHelp()

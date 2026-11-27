@@ -1,4 +1,4 @@
-﻿# 拾链 v1.0.4
+﻿# 拾链 v1.0.5
 
 **正式版 · Windows 视频解析与批量下载工具 · 免费开源**
 
@@ -50,7 +50,7 @@ git checkout master
 .\package.ps1
 ```
 
-构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.4-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
+构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.5-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
 
 历史自展开 EXE 的构建脚本 `package-singlefile.ps1` 仍保留供开发者使用；当前发布仅提供安装包 EXE 和压缩包。
 
@@ -67,7 +67,7 @@ git checkout master
 | `src/` | C# 源码、统一版本信息、图标和图标生成脚本 |
 | `tests/` | 核心与批量测试、本地 HTTP 测试服务 |
 | `docs/使用教程.md` | 启动、下载、音频、批量、代理、Cookie、故障排查和升级 |
-| `docs/releases/v1.0.4.md` | 本次发布说明 |
+| `docs/releases/v1.0.5.md` | 本次发布说明 |
 | `tools/` | 依赖说明、许可证、校验清单；EXE/DLL 不提交 Git |
 | `build.ps1` / `package.ps1` | 编译与便携版打包 |
 | `check-tools.ps1` / `test-all.ps1` | 依赖校验及测试入口 |

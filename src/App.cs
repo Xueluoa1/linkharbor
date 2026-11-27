@@ -220,8 +220,10 @@ namespace LinkHarbor
         void SetError(string message) { status.Text = "未能完成"; UpdateWorkflow("未能完成"); status.ForeColor = Color.FromArgb(180, 61, 50); detail.Text = message; AppendLog(message); }
         void AppendLog(string line)
         {
+            if (String.IsNullOrWhiteSpace(line)) return;
             if (log.TextLength > 100000) log.Text = log.Text.Substring(log.TextLength - 60000);
-            log.AppendText(line + Environment.NewLine);
+            string separator = log.TextLength == 0 ? "" : Environment.NewLine + Environment.NewLine;
+            log.AppendText(separator + line.Trim('\r','\n'));
         }
         void OnUi(Action action) { if (IsDisposed || !IsHandleCreated) return; try { BeginInvoke(new Action(() => { if (!IsDisposed) action(); })); } catch (InvalidOperationException) { } }
         void StartOperation(Func<CancellationToken, Task> action)

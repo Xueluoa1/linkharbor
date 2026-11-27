@@ -42,8 +42,18 @@ namespace LinkHarbor
         public void ConversionProgress(double fraction,string codec)
         {lock(sync){view.State=JobState.Processing;view.Progress=Math.Max(view.Progress,80+19*Math.Max(0,Math.Min(1,fraction)));view.Speed=0;view.Eta=0;view.Message="正在转为 "+codec+" · "+Math.Floor(fraction*100)+"%（原始下载文件保留）";}}
         public void ConvertedFile(string path){lock(sync)view.File=path;}
-        public void AppendLog(string line)
-        {lock(sync){if(view.Log.Length>60000)view.Log=view.Log.Substring(view.Log.Length-40000);view.Log+=line+Environment.NewLine;}}
+        public void AppendLog(string message)
+        {
+            if(String.IsNullOrWhiteSpace(message))return;
+            string separator=Environment.NewLine+Environment.NewLine;
+            var lines=message.Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries);
+            string entry=String.Join(separator,lines.Where(line=>!String.IsNullOrWhiteSpace(line)));
+            lock(sync)
+            {
+                if(view.Log.Length>60000)view.Log=view.Log.Substring(view.Log.Length-40000);
+                view.Log+=view.Log.Length==0?entry:separator+entry;
+            }
+        }
         public void ApplyLine(string line)
         {
             lock(sync)

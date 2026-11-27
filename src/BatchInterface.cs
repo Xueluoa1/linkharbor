@@ -116,7 +116,7 @@ namespace LinkHarbor
             int[] weights={42,235,100,65,90,140,90};
             for(int i=0;i<headers.Length;i++)taskGrid.Columns.Add(new DataGridViewTextBoxColumn{HeaderText=headers[i],FillWeight=weights[i],SortMode=DataGridViewColumnSortMode.NotSortable});
             taskDialog.Controls.Add(taskGrid);taskGrid.SelectionChanged+=(s,e)=>RefreshTaskDetails();
-            taskDetails=new TextBox{Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,BorderStyle=BorderStyle.None,BackColor=Theme.Surface,ForeColor=Muted,Font=TextFont(9)};taskDialog.Controls.Add(taskDetails);
+            taskDetails=new TextBox{Multiline=true,ReadOnly=true,WordWrap=true,ScrollBars=ScrollBars.Vertical,BorderStyle=BorderStyle.None,BackColor=Theme.Surface,ForeColor=Muted,Font=TextFont(9)};taskDialog.Controls.Add(taskDetails);
             taskCancel=ButtonAt(taskDialog,"取消全部",24,500,120,36,false);taskCancel.Click+=(s,e)=>CancelOperation();
             taskOpen=ButtonAt(taskDialog,"打开所选文件夹",156,500,170,36,false,"folder");
             taskOpen.Click+=(s,e)=>
@@ -163,7 +163,8 @@ namespace LinkHarbor
             var job=SelectedJob();
             if(job==null){taskDetails.Text="选择一条任务，查看链接、保存位置、错误原因和详细日志。";if(taskOpen!=null)taskOpen.Enabled=false;return;}
             var v=job.Snapshot();
-            string text=v.Title+"\r\n链接："+v.Url+"\r\n"+JobStateText(v.State)+"："+v.Message+(String.IsNullOrEmpty(v.File)?"":"\r\n保存位置："+v.File)+"\r\n\r\n"+v.Log;
+            string text=v.Title+"\r\n链接："+v.Url+"\r\n"+JobStateText(v.State)+"："+v.Message+(String.IsNullOrEmpty(v.File)?"":"\r\n保存位置："+v.File);
+            if(v.Log.Length>0)text+="\r\n\r\n"+v.Log;
             if(taskDetails.Text!=text)taskDetails.Text=text;
             if(taskOpen!=null)taskOpen.Enabled=v.State==JobState.Complete&&File.Exists(v.File);
         }

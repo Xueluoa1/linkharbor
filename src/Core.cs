@@ -263,7 +263,7 @@ namespace LinkHarbor
         {
             if (String.IsNullOrWhiteSpace(folder) || !Path.IsPathRooted(folder)) throw new ArgumentException("请选择完整的本地保存路径。");
             var a = Common(tools, proxy, cookies);
-            a.AddRange(new[] { "--newline", "--progress", "--progress-delta", "0.3", "--no-simulate", "--no-overwrites", "--continue", "--windows-filenames", "--trim-filenames", "160", "-P", folder, "-o", "%(title)s [%(id)s].%(ext)s", "--progress-template", "download:__PROGRESS__%(progress)j", "--print", "after_move:__FILE__%(filepath)j" });
+            a.AddRange(new[] { "--newline", "--progress", "--progress-delta", "0.3", "--no-simulate", "--no-overwrites", "--continue", "--windows-filenames", "--trim-filenames", "110", "-P", folder, "-o", "%(title).70s [%(id)s].%(ext)s", "--progress-template", "download:__PROGRESS__%(progress)j", "--print", "after_move:__FILE__%(filepath)j" });
             a.AddRange(new[]{"--print","before_dl:__STREAMS__%(requested_formats)j"});
             if (mode == "mp3") a.AddRange(new[] { "-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0" });
             else if (mode == "audio") a.AddRange(new[] { "-f", "ba/b", "-x" });
