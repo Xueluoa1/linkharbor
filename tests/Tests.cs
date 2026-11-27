@@ -17,11 +17,13 @@ class Tests
     static async Task Run(string[] args)
     {
         Check(!AppPaths.Installed && AppPaths.SettingsFile == Path.Combine(root,"settings.json"), "portable settings stay beside program");
+        Check(AppPaths.BrowserProfilePath == Path.Combine(root,"data","browser-profile"), "portable browser profile stays beside program");
         Check(new Settings().Folder == Path.Combine(root,"下载"), "portable default downloads preserved");
         string marker = Path.Combine(root,"installed-mode");
         try {
             File.WriteAllText(marker,"test");
             Check(AppPaths.Installed && AppPaths.SettingsFile == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"LinkHarbor","settings.json"), "installed settings outside application directory");
+            Check(AppPaths.BrowserProfilePath == Path.Combine(Path.GetDirectoryName(AppPaths.SettingsFile),"browser-profile"), "installed browser profile shares the local settings directory");
             Check(new Settings().Folder == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),"拾链"), "installed downloads in user videos directory");
         } finally { File.Delete(marker); }
         Check(Arguments.ValidateUrl(" https://example.com/watch?v=1&list=2 ") == "https://example.com/watch?v=1&list=2", "trim URL without losing query");
@@ -54,7 +56,7 @@ class Tests
         bool rejectLive = false; try { MediaInfo.FromJson("{\"live_status\":\"is_live\"}", "https://example.com"); } catch (InvalidOperationException) { rejectLive = true; }
         Check(rejectLive, "reject ongoing livestream");
         var dl = Arguments.Download("tools", info, root, "", "", "video", 720);
-        Check(dl.Contains("bv*[height<=720]+ba/b[height<=720]/bv[height<=720]") && dl[dl.Count - 2] == "--", "bounded resolution and URL separator");
+        Check(dl.Contains("bv*[height<=?720]+ba/b[height<=?720]/bv[height<=?720]") && dl[dl.Count - 2] == "--", "bounded resolution permits unknown height and preserves URL separator");
         Check(Arguments.Download("tools", info, root, "", "", "mp3", 0).Contains("--audio-format"), "MP3 conversion arguments");
 
         var fake = new Engine(Path.Combine(root, "fake-tools"));
@@ -90,6 +92,9 @@ class Tests
         string outDir = Path.Combine(root, "下载 空格", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(outDir);
         string file = ""; int events = 0;
         Action<string> progress = line => { if (line.StartsWith("__FILE__")) file = Json.Serializer().Deserialize<string>(line.Substring(8)); if (line.StartsWith("__PROGRESS__")) { var p = Json.Parse(line.Substring(12)); events++; } };
+        var unknownHeight = await engine.Run(Arguments.Download(tools, direct, outDir, "", "", "video", 720), CancellationToken.None, progress, false);
+        Check(direct.Heights.Count==0 && unknownHeight.Code==0 && File.Exists(file), "actual download with a 720p cap and missing height: " + unknownHeight.Error);
+        file=""; events=0;
         var video = await engine.Run(Arguments.Download(tools, dash, outDir, "", "", "video", 180), CancellationToken.None, progress, false);
         Check(video.Code == 0 && File.Exists(file) && Path.GetExtension(file) == ".mkv", "actual download and merge MKV: " + video.Error);
         Check(events > 0, "structured progress events received");

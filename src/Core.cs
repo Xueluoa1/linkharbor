@@ -21,8 +21,9 @@ namespace LinkHarbor
         public static string SettingsFile { get { return Path.Combine(Installed ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinkHarbor") : AppDomain.CurrentDomain.BaseDirectory, "settings.json"); } }
         public static string DefaultDownloads { get { return Path.Combine(Installed ? Environment.GetFolderPath(Environment.SpecialFolder.MyVideos) : AppDomain.CurrentDomain.BaseDirectory, Installed ? "拾链" : "下载"); } }
         public static string BrowserProfilePath { get { return Path.Combine(Installed
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"LinkHarbor")
+            ? Path.GetDirectoryName(SettingsFile)
             : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"data"),"browser-profile"); } }
+        public static string BilibiliCookies { get { return Path.Combine(BrowserProfilePath, "bilibili-cookies.txt"); } }
 
         public static FileStream LockBrowserProfile()
         {
@@ -274,7 +275,7 @@ namespace LinkHarbor
             }
             else
             {
-                string filter = height > 0 ? "[height<=" + height.ToString(CultureInfo.InvariantCulture) + "]" : "";
+                string filter = height > 0 ? "[height<=?" + height.ToString(CultureInfo.InvariantCulture) + "]" : "";
                 if (codec == "mp4-copy" || codec == "av1-copy")
                 {
                     bool av1 = codec == "av1-copy";

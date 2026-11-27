@@ -108,7 +108,7 @@ namespace LinkHarbor
                 string host=new Uri(link).Host;
                 bool douyin=Arguments.HostMatches(host,"douyin.com","iesdouyin.com");
                 bool xhs=Arguments.HostMatches(host,"xiaohongshu.com","xhslink.com");
-                using(var copy=new CookieCopy(cookies))
+                using(var copy=new CookieCopy(link,cookies))
                 {
                     if(douyin||xhs)
                     {
@@ -124,7 +124,7 @@ namespace LinkHarbor
                             job.AppendLog("小红书网页解析："+ex.Message+"；正在尝试 yt-dlp。");
                         }
                     }
-                    var args=Arguments.Parse(engine.ToolsPath,link,effective,copy.Path);
+                    var args=Arguments.Parse(engine.ToolsPath,link,effective,"");
                     SetConnection(args,link,bypassDomestic,copy.Path);
                     var result=await engine.Run(args,token,null,true);
                     if(result.Code!=0)throw new InvalidOperationException(result.Error);
@@ -137,15 +137,10 @@ namespace LinkHarbor
                 if(!identities.Add(job.Media.Identity))job.SetState(JobState.Duplicate,"与本批次另一条链接指向同一视频，已跳过");
         }
 
-        static void SetConnection(List<string> args,string link,bool bypassDomestic,string cookieFile)
+        internal static void SetConnection(List<string> args,string link,bool bypassDomestic,string cookieFile)
         {
             if(bypassDomestic && Arguments.IsDomestic(link))args.InsertRange(0,new[]{"--proxy",""});
-            if(!String.IsNullOrEmpty(cookieFile)||!Arguments.HostMatches(new Uri(link).Host,"bilibili.com","b23.tv"))return;
-            string browser;
-            if(AppPaths.BrowserExecutable(out browser)==null)return;
-            string profile=Path.Combine(AppPaths.BrowserProfilePath,browser,"Default");
-            if(File.Exists(Path.Combine(profile,"Network","Cookies")) && File.Exists(Path.Combine(AppPaths.BrowserProfilePath,"bilibili-login")))
-                args.InsertRange(0,new[]{"--cookies-from-browser",browser+":"+profile});
+            if(!String.IsNullOrEmpty(cookieFile))args.InsertRange(0,new[]{"--cookies",cookieFile});
         }
 
         async Task<MediaInfo> ResolvePlatform(string script,string url,string proxy,string cookiePath,CancellationToken token)
@@ -206,10 +201,10 @@ namespace LinkHarbor
             {
                 if(mode=="video"?!job.Media.HasVideo:!job.Media.HasAudio)throw new InvalidOperationException("此视频没有所选的媒体类型，请更改下载内容后重试。");
                 job.SetState(JobState.Downloading,"正在连接下载源");
-                using(var copy=new CookieCopy(cookies,job.Media.BrowserCookieJar))
+                using(var copy=new CookieCopy(job.Media.Url,cookies,job.Media.BrowserCookieJar))
                 {
                     string effective=Arguments.EffectiveProxy(job.Media.Url,proxy,bypassDomestic);
-                    var args=Arguments.Download(engine.ToolsPath,job.Media,folder,effective,copy.Path,mode,height,codec);
+                    var args=Arguments.Download(engine.ToolsPath,job.Media,folder,effective,"",mode,height,codec);
                     SetConnection(args,job.Media.Url,bypassDomestic,copy.Path);
                     if(jobs.Count>1)
                     {
@@ -278,21 +273,37 @@ namespace LinkHarbor
             var included=jobs.Where(j=>j.State!=JobState.Duplicate).ToList();
             return included.Count==0?0:included.Average(j=>j.Progress);
         }
-        sealed class CookieCopy:IDisposable
+        internal sealed class CookieCopy:IDisposable
         {
             public string Path {get;private set;}
-            public CookieCopy(string source,string extra=null)
+            public CookieCopy(string link,string source,string extra=null)
             {
-                Path="";if(String.IsNullOrWhiteSpace(source)&&String.IsNullOrEmpty(extra))return;
-                string target=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"linkharbor-"+Guid.NewGuid().ToString("N")+".txt");
-                try
+                Path="";
+                using(var input=OpenSource(link,source))
                 {
-                    if(!String.IsNullOrWhiteSpace(source)) File.Copy(source,target);
-                    else File.WriteAllText(target,"# Netscape HTTP Cookie File\n",new UTF8Encoding(false));
-                    if(!String.IsNullOrEmpty(extra))File.AppendAllText(target,"\n"+extra+"\n",new UTF8Encoding(false));
-                    Path=target;
+                    if(input==null && String.IsNullOrEmpty(extra))return;
+                    string target=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"linkharbor-"+Guid.NewGuid().ToString("N")+".txt");
+                    try
+                    {
+                        if(input!=null)
+                        {
+                            using(var output=File.Open(target,FileMode.CreateNew,FileAccess.Write,FileShare.None))input.CopyTo(output);
+                        }
+                        else File.WriteAllText(target,"# Netscape HTTP Cookie File\n",new UTF8Encoding(false));
+                        if(!String.IsNullOrEmpty(extra))File.AppendAllText(target,"\n"+extra+"\n",new UTF8Encoding(false));
+                        Path=target;
+                    }
+                    catch{if(File.Exists(target))File.Delete(target);throw;}
                 }
-                catch{if(File.Exists(target))File.Delete(target);throw;}
+            }
+            static FileStream OpenSource(string link,string external)
+            {
+                if(!String.IsNullOrWhiteSpace(external))return File.OpenRead(external);
+                if(!Arguments.HostMatches(new Uri(link).Host,"bilibili.com","b23.tv"))return null;
+                // An authorization window can atomically replace the saved jar while a task copies it.
+                try{return File.Open(AppPaths.BilibiliCookies,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete);}
+                catch(FileNotFoundException){return null;}
+                catch(DirectoryNotFoundException){return null;}
             }
             public void Dispose(){if(Path.Length>0)try{File.Delete(Path);}catch{}}
         }

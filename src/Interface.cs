@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -202,15 +203,21 @@ namespace LinkHarbor
             optional.Click+=(s,e)=>sites.Show(optional,0,optional.Height);
             optional.Disposed+=(s,e)=>sites.Dispose();
             editable.Add(optional);
-            bypassDomestic=new CheckBox{Text="国内网站（抖音/B站/小红书）直连不走代理",Font=TextFont(8),BackColor=Color.Transparent,AutoSize=true};
+            bypassDomestic=new CheckBox{Text="国内网站（抖音/B站/小红书）直连不走代理",Font=TextFont(8),BackColor=Color.Transparent};
             networkCard.Controls.Add(bypassDomestic);
-            Place(bypassDomestic,22,161,310,25);
             proxy=TextAt(networkCard,"代理（可选）  http://127.0.0.1:7890");
             cookiesButton=ButtonAt(networkCard,"选择 Cookie 文件",22,100,160,34,false);
             clearCookies=ButtonAt(networkCard,"清除",190,100,65,34,false);
-            cookieLabel=LabelAt(networkCard,CookieDropHint,23,158,450,20,8,Muted,false);
-            var cookieHelp=ButtonAt(networkCard,"如何获取？",0,115,106,36,false);cookieHelp.Click+=(s,e)=>ShowNetworkHelp();
-            networkCard.Resize+=(s,e)=>{float w=networkCard.Width/uiScale;Place(optional,w-126,12,106,32);Place(proxy.Parent,20,51,w-40,40);Place(cookieHelp,w-126,100,106,34);Place(cookieLabel,23,140,w-46,22);};
+            cookieLabel=LabelAt(networkCard,CookieDropHint,23,136,450,20,8,Muted,false);
+            var cookieHelp=ButtonAt(networkCard,"如何获取？",0,100,106,34,false);cookieHelp.Click+=(s,e)=>ShowNetworkHelp();
+            networkCard.Resize+=(s,e)=>{
+                float w=networkCard.Width/uiScale;
+                Place(optional,w-126,12,106,32);
+                Place(proxy.Parent,20,51,w-40,40);
+                Place(cookieHelp,w-126,100,106,34);
+                Place(cookieLabel,23,136,w-46,20);
+                Place(bypassDomestic,22,162,w-44,24);
+            };
             cookiesButton.Click+=(s,e)=>{using(var picker=new OpenFileDialog{Title="选择 Netscape 格式 Cookie 文件",Filter="Cookie 文本文件|*.txt|所有文件|*.*"})if(picker.ShowDialog(this)==DialogResult.OK)SetCookieFile(picker.FileName);};
             clearCookies.Click+=(s,e)=>SetCookieFile("");
             EnableCookieDrop(networkCard);
@@ -227,6 +234,7 @@ namespace LinkHarbor
 
         async System.Threading.Tasks.Task AuthorizeSite(string site)
         {
+            bool bilibili=site=="哔哩哔哩";
             string url=site=="抖音"?"https://www.douyin.com/":site=="小红书"?"https://www.xiaohongshu.com/":"https://www.bilibili.com/";
             try
             {
@@ -235,7 +243,7 @@ namespace LinkHarbor
                     string browser;
                     string exe=AppPaths.BrowserExecutable(out browser);
                     if(exe==null)throw new InvalidOperationException("请先安装 Edge 或 Chrome。");
-                    string profile=Path.Combine(AppPaths.BrowserProfilePath,browser);
+                    string profile=bilibili ? Path.Combine(AppPaths.BrowserProfilePath,"bilibili",browser) : Path.Combine(AppPaths.BrowserProfilePath,browser);
                     string route=Arguments.EffectiveProxy(url,proxy.Text,bypassDomestic.Checked);
                     if(route.Length>0 && (!Uri.IsWellFormedUriString(route,UriKind.Absolute) || new Uri(route).UserInfo.Length>0))
                         throw new InvalidOperationException("网页登录需要有效且不含用户名密码的代理地址。");
@@ -245,12 +253,19 @@ namespace LinkHarbor
                     {
                         SetStatus("网页登录","请在专用浏览器中登录"+site+"，关闭浏览器窗口后再解析。");
                         await System.Threading.Tasks.Task.Run(()=>proc.WaitForExit());
-                        if(site=="哔哩哔哩")File.WriteAllText(Path.Combine(AppPaths.BrowserProfilePath,"bilibili-login"),browser);
+                    }
+                    if(bilibili)
+                    {
+                        if(!IsDisposed)SetStatus("正在保存授权","正在读取刚才登录的 B 站专用浏览器。");
+                        var exportArgs=new List<string>{Path.Combine(engine.ToolsPath,"browser-media.cjs"),"--export-cookies",exe,profile,".bilibili.com",AppPaths.BilibiliCookies};
+                        var result=await engine.RunTool("node.exe",exportArgs,System.Threading.CancellationToken.None,null,true);
+                        if(result.Code!=0)throw new IOException("未能更新 B 站授权。"+result.Error);
+                        if(!File.Exists(AppPaths.BilibiliCookies))throw new IOException("未找到有效的 B 站 Cookie，请重新打开授权窗口，完成登录后再关闭。");
                     }
                 }
-                if(!IsDisposed)SetStatus("授权窗口已关闭","可以粘贴作品链接并解析。");
+                if(!IsDisposed)SetStatus(bilibili?"已保存 B 站 Cookie":"授权窗口已关闭","可以粘贴作品链接并解析。");
             }
-            catch(Exception ex){if(!IsDisposed)MessageBox.Show(this,ex.Message,"网页登录授权");}
+            catch(Exception ex){if(!IsDisposed){SetStatus("网页登录授权失败",ex.Message);MessageBox.Show(this,ex.Message,"网页登录授权");}}
         }
         SoftButton Rail(string icon,string title,int y)
         {
@@ -312,6 +327,8 @@ namespace LinkHarbor
                     throw new Exception("Control outside card: "+child.GetType().Name+" / "+child.Text);
             if(mode.Bounds.IntersectsWith(quality.Bounds)||quality.Bounds.IntersectsWith(videoCodec.Bounds)||download.Bounds.IntersectsWith(cancel.Bounds)||cookiesButton.Bounds.IntersectsWith(clearCookies.Bounds))
                 throw new Exception("Interactive controls overlap");
+            if(cookieLabel.Bounds.IntersectsWith(bypassDomestic.Bounds))
+                throw new Exception("Cookie binding label overlaps the domestic proxy checkbox");
             if(helpNav.Top<topbar.Bottom||helpNav.Bottom>surface.Height)throw new Exception("Sidebar help outside window");
             if(Region==null||Region.IsVisible(0,0))throw new Exception("Rounded window region missing");
         }

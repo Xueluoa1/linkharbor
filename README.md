@@ -1,4 +1,4 @@
-﻿# 拾链 v1.0.3
+﻿# 拾链 v1.0.4
 
 **正式版 · Windows 视频解析与批量下载工具 · 免费开源**
 
@@ -8,15 +8,15 @@
 
 ## 下载与使用
 
-**[直接下载 v1.0.3 安装包 EXE](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.3/LinkHarbor-v1.0.3-Setup.exe)**
+**[下载已发布的 Windows 安装包](https://github.com/Xueluoa1/linkharbor/releases/latest)**
 
-1. 下载 **LinkHarbor-v1.0.3-Setup.exe** 并双击，选择安装位置，按需勾选“创建桌面快捷方式”。
+1. 下载 **以 `-Setup.exe` 结尾的安装包** 并双击，选择安装位置，按需勾选“创建桌面快捷方式”。
 2. 点击“安装”，路径和快捷方式选项会替换为实际安装进度。完成后点击“启动拾链”，以后从桌面或开始菜单打开。已包含 yt-dlp、FFmpeg、Node.js 和许可证，无需另下 ZIP 或联网补组件。
 3. 粘贴视频链接，点击“解析链接”，选择画质或音频格式、保存目录，再点击“开始下载”。
 
 适用于 Windows 10/11 x64，需要 .NET Framework 4.x。安装包约 92 MiB，安装后约 300 MiB；为安装和临时文件保留充足空间。默认仅为当前用户安装，无需管理员权限；自选位置须有写入权限。设置保存在 `%LOCALAPPDATA%\LinkHarbor\settings.json`，默认下载到用户“视频”目录下的“拾链”文件夹。可通过 Windows 设置 → 应用 → 拾链卸载，个人设置和下载文件保留。
 
-也可下载 **[ZIP 便携包](https://github.com/Xueluoa1/linkharbor/releases/download/v1.0.3/LinkHarbor-v1.0.3-Windows-x64.zip)**，全部解压后双击其中的 `拾链下载器.exe`，保留 `tools/`。发布页只保留安装包 EXE 和压缩包，旧自展开 EXE、界面单文件 EXE 已移除。Release 自动生成的 `Source code` 是源码，不是可运行程序。文件校验值见发布页。
+也可下载 **[发布页中以 `-Windows-x64.zip` 结尾的便携包](https://github.com/Xueluoa1/linkharbor/releases/latest)**，全部解压后双击其中的 `拾链下载器.exe`，保留 `tools/`。发布页只保留安装包 EXE 和压缩包，旧自展开 EXE、界面单文件 EXE 已移除。Release 自动生成的 `Source code` 是源码，不是可运行程序。文件校验值见发布页。
 
 **[完整操作教程](docs/使用教程.md)** · [离线快速说明](使用说明.txt) · [作者声明](AUTHOR_NOTICE.md) · [更新记录](CHANGELOG.md)
 
@@ -50,7 +50,7 @@ git checkout master
 .\package.ps1
 ```
 
-构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.3-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
+构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.4-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
 
 历史自展开 EXE 的构建脚本 `package-singlefile.ps1` 仍保留供开发者使用；当前发布仅提供安装包 EXE 和压缩包。
 
@@ -60,14 +60,14 @@ git checkout master
 
 ## 目录
 
-安装包源码位于 `packaging/Setup.cs` 和 `packaging/installer.iss`，使用与主程序共用的 WinForms 绘制控件及 Inno Setup 6.7.3。运行 `package-installer.ps1` 构建，详见 [安装包构建与验证](docs/安装包构建.md)。Release 的 `LinkHarbor-v1.0.3-Source.zip` 包含本次应用及安装包完整源码。
+安装包源码位于 `packaging/Setup.cs` 和 `packaging/installer.iss`，使用与主程序共用的 WinForms 绘制控件及 Inno Setup 6.7.3。运行 `package-installer.ps1` 构建，详见 [安装包构建与验证](docs/安装包构建.md)。各版本的源码包均包含对应的应用与安装器源码。
 
 | 路径 | 内容 |
 | --- | --- |
 | `src/` | C# 源码、统一版本信息、图标和图标生成脚本 |
 | `tests/` | 核心与批量测试、本地 HTTP 测试服务 |
 | `docs/使用教程.md` | 启动、下载、音频、批量、代理、Cookie、故障排查和升级 |
-| `docs/releases/v1.0.3.md` | 本次发布说明 |
+| `docs/releases/v1.0.4.md` | 本次发布说明 |
 | `tools/` | 依赖说明、许可证、校验清单；EXE/DLL 不提交 Git |
 | `build.ps1` / `package.ps1` | 编译与便携版打包 |
 | `check-tools.ps1` / `test-all.ps1` | 依赖校验及测试入口 |

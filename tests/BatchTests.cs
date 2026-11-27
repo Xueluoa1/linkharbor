@@ -42,6 +42,7 @@ class BatchTests
         var jobs=new[]{new BatchJob(1,origin+"/video.mp4?alias=one"),new BatchJob(2,origin+"/video.mp4?alias=two"),new BatchJob(3,"invalid link")};
         string folder=Path.GetFullPath(Path.Combine("test-output","batch-"+Guid.NewGuid().ToString("N")));Directory.CreateDirectory(folder);
         string cookie=Path.Combine(folder,"fixture-cookies.txt"),cookieText="# Netscape HTTP Cookie File\r\n127.0.0.1\tFALSE\t/\tFALSE\t0\tfixture\ttest\r\n";File.WriteAllText(cookie,cookieText);
+        CheckBilibiliCookies(cookie);
         await runner.ParseAsync(jobs,"",cookie,CancellationToken.None);
         Check(jobs.Count(j=>j.Snapshot().State==JobState.Ready)==2&&jobs[2].Snapshot().State==JobState.Failed,"invalid link does not block valid parses");
         await runner.DownloadAsync(jobs,folder,"",cookie,"video",0,CancellationToken.None);
@@ -116,6 +117,37 @@ class BatchTests
         await runner.DownloadAsync(new[]{dash,nonAac},folder,"","","m4a",0,token);
         Check(dash.Snapshot().State==JobState.Complete&&await MediaHash(engine,original,"a")==await MediaHash(engine,dash.Snapshot().File,"a"),"M4A preserves source AAC packets");
         Check(nonAac.Snapshot().State==JobState.Complete&&nonAac.Snapshot().File.EndsWith(".m4a"),"M4A converts a non-AAC source to validated AAC");
+    }
+
+    static void CheckBilibiliCookies(string external)
+    {
+        // This test executable lives in test-output, with its own portable profile.
+        string saved=AppPaths.BilibiliCookies;
+        string url="https://www.bilibili.com/video/test";
+        Directory.CreateDirectory(AppPaths.BrowserProfilePath);
+        using(var empty=new BatchRunner.CookieCopy(url,""))Check(empty.Path=="","Bilibili works anonymously before login");
+        using(var stream=new FileStream(saved,FileMode.CreateNew,FileAccess.Write))
+        using(var writer=new StreamWriter(stream))writer.Write("# Netscape HTTP Cookie File\n.bilibili.com\tTRUE\t/\tTRUE\t0\tfixture\tsynthetic\n");
+        try
+        {
+            string savedText=File.ReadAllText(saved),temporary;
+            using(var longLink=new BatchRunner.CookieCopy(url,""))
+            using(var shortLink=new BatchRunner.CookieCopy("https://b23.tv/test",null))
+            using(var explicitFile=new BatchRunner.CookieCopy(url,external))
+            using(var other=new BatchRunner.CookieCopy("https://bilibili.com.example.org/",""))
+            {
+                temporary=longLink.Path;
+                Check(File.ReadAllText(temporary)==savedText && File.ReadAllText(shortLink.Path)==savedText &&
+                    temporary!=shortLink.Path && temporary!=saved,"Bilibili and b23 use separate task copies of the saved authorization");
+                var args=Arguments.Parse("tools",url,"","");
+                BatchRunner.SetConnection(args,url,true,temporary);
+                Check(args[args.IndexOf("--cookies")+1]==temporary && !args.Contains("--cookies-from-browser"),"Bilibili authorization is passed as a Netscape jar");
+                Check(other.Path=="" && File.ReadAllText(explicitFile.Path)==File.ReadAllText(external),"external file wins and unrelated sites receive no Bilibili cookies");
+                File.AppendAllText(temporary,"# updated by a task");
+            }
+            Check(!File.Exists(temporary) && File.ReadAllText(saved)==savedText,"task cleanup preserves the saved Bilibili authorization");
+        }
+        finally {File.Delete(saved);}
     }
 
     static async Task<string> MediaHash(Engine engine, string file, string stream)

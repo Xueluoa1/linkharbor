@@ -35,10 +35,24 @@ function importedCookies(text, site) {
 }
 function cookieJar(cookies, urls) {
     const hosts=urls.map(s=>new URL(s).hostname);
-    return cookies.filter(c=>!c.partitionKey && hosts.some(h=>c.domain.startsWith('.')?
-        domainMatches(h,[c.domain.slice(1)]):h===c.domain) && !/[\r\n\t]/.test(c.domain+c.path+c.name+c.value))
+    return cookieRows(cookies.filter(c=>hosts.some(h=>c.domain.startsWith('.')?
+        domainMatches(h,[c.domain.slice(1)]):h===c.domain)));
+}
+function cookieRows(cookies) {
+    const now=Date.now()/1000;
+    return cookies.filter(c=>!c.partitionKey && !c.partitionKeyOpaque && (c.expires===undefined || c.expires===-1 || c.expires>now)
+        && !/[\0\r\n\t]/.test(c.domain+c.path+c.name+c.value))
         .map(c=>[(c.httpOnly?'#HttpOnly_':'')+c.domain,c.domain.startsWith('.')?'TRUE':'FALSE',
             c.path,c.secure?'TRUE':'FALSE',Math.max(0,Math.floor(c.expires||0)),c.name,c.value].join('\t')).join('\n');
+}
+function saveBilibiliCookies(cookies, outFile) {
+    const rows=cookieRows(cookies.filter(c=>domainMatches(c.domain.replace(/^\./,''),['bilibili.com'])));
+    if(!rows) { fs.rmSync(outFile,{force:true}); return; }
+    const temp=outFile+'.'+require('node:crypto').randomUUID()+'.tmp';
+    try {
+        fs.writeFileSync(temp,'# Netscape HTTP Cookie File\n'+rows+'\n',{encoding:'utf8',flag:'wx',mode:0o600});
+        fs.renameSync(temp,outFile);
+    } finally { fs.rmSync(temp,{force:true}); }
 }
 function browserPaths() {
     const paths=[];
@@ -71,20 +85,18 @@ async function resolve(adapter,input,root,proxy='',cookieFile='') {
     }
     throw reason;
 }
-async function visit(site,url,exe,profile,proxy,cookies,deadline) {
+async function withBrowser(exe,profile,proxy,deadline,inspect) {
     // Use the debugging pipe inherited by this process. No listening port, stale port file or attachment to another window.
     const flags=['--headless=new','--no-first-run','--no-default-browser-check','--disable-extensions','--disable-background-mode',
         '--remote-debugging-pipe','--autoplay-policy=no-user-gesture-required','--mute-audio','--window-size=1280,800',
         '--user-data-dir='+profile,proxy?'--proxy-server='+proxy:'--no-proxy-server','about:blank'];
     const child=spawn(exe,flags,{stdio:['ignore','ignore','ignore','pipe','pipe'],windowsHide:true});
-    const pending=new Map(), responses=new Set(), candidates=new Map();
-    let sequence=0,sessionId,buffer=Buffer.alloc(0),startup=true,closed=false,firstFailure='',candidate,finished=false;
-    let resolveResult,rejectResult;
-    const result=new Promise((r,j)=>{resolveResult=r;rejectResult=j});
-    result.catch(()=>{});
-    function fail(error){rejectResult(error);}
+    const pending=new Map();
+    let sequence=0,sessionId,buffer=Buffer.alloc(0),startup=true,closed=false,finished=false,onEvent;
+    let fail;
+    const interrupted=new Promise((_,reject)=>{fail=reject;});
     const timer=setTimeout(()=>fail(Error(startup?'浏览器未就绪，请先关闭拾链的授权窗口。':
-        firstFailure||'网页未及时返回作品信息，请检查网络或在网页登录后重试。')),Math.max(1,deadline-Date.now()));
+        '浏览器操作超时，请检查网络或重新打开网页登录授权。')),Math.max(1,deadline-Date.now()));
     const startTimer=setTimeout(()=>{if(startup)fail(Error('初始化浏览器网络监听超时。'))},6000);
     function command(method,params={},useSession=true) {
         if(closed) return Promise.reject(Error('网页解析浏览器已关闭。'));
@@ -103,28 +115,13 @@ async function visit(site,url,exe,profile,proxy,cookies,deadline) {
     }
     child.once('exit',disconnected);child.once('error',disconnected);
     child.stdio[3].on('error',disconnected);child.stdio[4].on('error',disconnected);
-    let currentId=site.id(url);
     async function event(m) {
         if(m.id) {
             const call=pending.get(m.id);
             if(call){pending.delete(m.id);if(m.error)call.reject(Error(m.error.message));else call.resolve(m.result);}
             return;
         }
-        if(!sessionId || m.sessionId!==sessionId || finished) return;
-        const p=m.params;
-        if(m.method==='Page.frameNavigated' && !p.frame.parentId && !currentId) currentId=site.id(p.frame.url);
-        if(m.method==='Network.responseReceived' && site.response(p.response.url)) {
-            if(p.response.status===200) responses.add(p.requestId);
-            else firstFailure='作品详情接口返回 HTTP '+p.response.status+'。';
-        }
-        if(m.method==='Network.loadingFinished' && responses.delete(p.requestId)){
-            let json;
-            try {const r=await command('Network.getResponseBody',{requestId:p.requestId});
-                json=JSON.parse(r.base64Encoded?Buffer.from(r.body,'base64').toString('utf8'):r.body);
-            } catch {return;}
-            for(const item of site.items(json)) if(item && site.key(item)) candidates.set(site.key(item),item);
-            if(!candidates.size) firstFailure=site.apiError(json)||firstFailure;
-        }
+        if(onEvent && sessionId && m.sessionId===sessionId && !finished) await onEvent(m);
     }
     child.stdio[4].on('data',chunk=>{
         buffer=Buffer.concat([buffer,chunk]);
@@ -134,20 +131,58 @@ async function visit(site,url,exe,profile,proxy,cookies,deadline) {
             if(frame.length)try{event(JSON.parse(frame)).catch(fail)}catch(error){fail(error)}
         }
     });
-    async function inspect(){
+    async function start(){
         const {targetId}=await command('Target.createTarget',{url:'about:blank'},false);
         sessionId=(await command('Target.attachToTarget',{targetId,flatten:true},false)).sessionId;
-        const ua=(await command('Browser.getVersion',{},false)).userAgent;
-        await command('Page.enable');await command('Network.enable');
+        startup=false;
+        return inspect(command,fn=>{onEvent=fn;},()=>!finished && !closed);
+    }
+    try {return await Promise.race([start(),interrupted]);}
+    catch(e){e.startup=startup;throw e;}
+    finally{
+        finished=true;clearTimeout(timer);clearTimeout(startTimer);
+        if(!closed){command('Browser.close',{},false).catch(()=>{});await Promise.race([new Promise(r=>child.once('exit',r)),delay(2000,undefined,{ref:false})]);}
+        if(!closed)child.kill();
+        child.stdio[3].destroy();child.stdio[4].destroy();
+    }
+}
+async function configurePage(command) {
+    const rawUa=(await command('Browser.getVersion',{},false)).userAgent;
+    const ua=rawUa.replace(/HeadlessChrome\//g,'Chrome/');
+    await command('Page.enable');
+    await command('Network.enable');
+    // Chromium adds the HTTP quality weights to this ordered language list.
+    await command('Network.setUserAgentOverride',{userAgent:ua,acceptLanguage:'zh-CN,zh'});
+    return ua;
+}
+async function visit(site,url,exe,profile,proxy,cookies,deadline) {
+    return withBrowser(exe,profile,proxy,deadline,async function inspect(command,listen,active){
+        const responses=new Set(), candidates=new Map();
+        let currentId=site.id(url),firstFailure='';
+        listen(async ({method,params:p})=>{
+            if(method==='Page.frameNavigated' && !p.frame.parentId && !currentId) currentId=site.id(p.frame.url);
+            if(method==='Network.responseReceived' && site.response(p.response.url)) {
+                if(p.response.status===200) responses.add(p.requestId);
+                else firstFailure='作品详情接口返回 HTTP '+p.response.status+'。';
+            }
+            if(method==='Network.loadingFinished' && responses.delete(p.requestId)){
+                let json;
+                try {const r=await command('Network.getResponseBody',{requestId:p.requestId});
+                    json=JSON.parse(r.base64Encoded?Buffer.from(r.body,'base64').toString('utf8'):r.body);
+                } catch {return;}
+                for(const item of site.items(json)) if(item && site.key(item)) candidates.set(site.key(item),item);
+                if(!candidates.size) firstFailure=site.apiError(json)||firstFailure;
+            }
+        });
+        const ua=await configurePage(command);
         if(cookies && fs.existsSync(cookies)) {
             const list=importedCookies(fs.readFileSync(cookies,'utf8'),site.domain);
             if(list.length) await command('Network.setCookies',{cookies:list});
         }
-        startup=false;
         const nav=await command('Page.navigate',{url});
         if(nav.errorText && nav.errorText!=='net::ERR_ABORTED')throw Error('打开作品页失败：'+nav.errorText);
         const started=Date.now();
-        while(!finished && !closed) {
+        while(active()) {
             let snap;
             try{
                 const expression='('+site.snapshot.toString()+')('+JSON.stringify(currentId)+')';
@@ -155,29 +190,41 @@ async function visit(site,url,exe,profile,proxy,cookies,deadline) {
             }catch{ /* Redirects replace the JavaScript context. */ }
             if(snap && site.owns(snap.url)){
                 currentId=currentId||site.id(snap.url);
-                candidate=candidates.get(currentId) || (snap.item && site.key(snap.item)===currentId?snap.item:null);
+                const candidate=candidates.get(currentId) || (snap.item && site.key(snap.item)===currentId?snap.item:null);
                 if(candidate) {
                     const info=site.info(candidate,currentId,ua,snap.video);
                     const urls=info.formats.map(f=>f.url);
                     const jar=cookieJar((await command('Network.getCookies',{urls})).cookies,urls);
                     if(jar)info._linkharbor_cookie_jar=jar;
-                    resolveResult(info);return;
+                    return info;
                 }
                 if(Date.now()-started>=2500 && (snap.blocked || firstFailure))throw Error(snap.blocked||firstFailure);
             }
             await delay(450);
         }
-    }
-    try {inspect().catch(fail);return await result;}
-    catch(e){e.startup=startup;throw e;}
-    finally{
-        finished=true;clearTimeout(timer);clearTimeout(startTimer);
-        if(!closed){command('Browser.close',{},false).catch(()=>{});await Promise.race([new Promise(r=>child.once('exit',r)),delay(650)]);}
-        if(!closed)child.kill();
-        child.stdio[3].destroy();child.stdio[4].destroy();
-    }
+    });
+}
+async function exportCookies(exe,profile,domain,outFile) {
+    const app=fs.realpathSync.native(path.resolve(__dirname,'..'));
+    const installed=fs.existsSync(path.join(app,'installed-mode'));
+    const root=installed ? path.join(fs.realpathSync.native(process.env.LOCALAPPDATA),'LinkHarbor','browser-profile')
+        : path.join(app,'data','browser-profile');
+    const browser=browserPaths().find(b=>path.relative(b.exe,exe)==='');
+    if(!browser || !['.bilibili.com','bilibili.com'].includes(domain)
+        || path.relative(path.join(root,'bilibili',browser.name),fs.realpathSync.native(profile))!==''
+        || path.relative(root,fs.realpathSync.native(path.dirname(outFile)))!=='' || path.basename(outFile)!=='bilibili-cookies.txt')
+        throw Error('仅支持拾链专用的 B 站授权目录与文件。');
+    const cookies=await withBrowser(exe,profile,'',Date.now()+20000,async command=>
+        (await command('Storage.getCookies',{},false)).cookies);
+    saveBilibiliCookies(cookies,outFile);
 }
 function cli(adapter){
     resolve(adapter,...process.argv.slice(2)).then(info=>console.log(JSON.stringify(info))).catch(e=>{console.error(e.message);process.exitCode=1});
 }
-module.exports={domainMatches,safeMedia,importedCookies,cookieJar,cli};
+if(require.main===module){
+    const [mode,...args]=process.argv.slice(2);
+    if(mode==='--export-cookies' && args.length===4)
+        exportCookies(...args).catch(e=>{console.error(e.message);process.exitCode=1;});
+    else {console.error('缺少 B 站网页登录授权参数。');process.exitCode=1;}
+}
+module.exports={domainMatches,safeMedia,importedCookies,cookieJar,configurePage,saveBilibiliCookies,resolve,cli};
