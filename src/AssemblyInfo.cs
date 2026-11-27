@@ -13,7 +13,7 @@ namespace LinkHarbor
 {
     internal static class AppInfo
     {
-        public const string Version = "1.0.2";
+        public const string Version = "1.0.3";
         public const string DisplayVersion = "v" + Version;
     }
 }

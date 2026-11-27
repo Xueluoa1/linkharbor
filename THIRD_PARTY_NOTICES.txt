@@ -1,4 +1,4 @@
-﻿拾链 v1.0.2 正式版
+﻿拾链 v1.0.3 正式版
 Copyright (C) 2026 雪落a；拾链自身源码采用 GPL-3.0-only，见 LICENSE。
 拾链基于 yt-dlp，提供 UI 适配、任务管理与便携封装，非 yt-dlp 官方客户端。
 B站 ID：雪落a77；个人网站：https://xueluo.online。

@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace LinkHarbor
 {
@@ -95,16 +96,39 @@ namespace LinkHarbor
         public const int ParallelLimit=3;
         readonly Engine engine;
         public BatchRunner(Engine engine){this.engine=engine;}
-        public async Task ParseAsync(IList<BatchJob> jobs,string proxy,string cookies,CancellationToken token)
+        static readonly SemaphoreSlim BrowserLock=new SemaphoreSlim(1,1);
+        public async Task ParseAsync(IList<BatchJob> jobs,string proxy,string cookies,CancellationToken token,bool bypassDomestic=true)
         {
             await RunLimited(jobs,async job=>
             {
                 job.SetState(JobState.Parsing,"正在获取视频信息");
                 string link=Arguments.ValidateUrl(job.Snapshot().Url);
+                link=Regex.Replace(link,@"^(https?://)m\.bilibili\.com(?=/video/)","$1www.bilibili.com",RegexOptions.IgnoreCase);
+                string effective=Arguments.EffectiveProxy(link,proxy,bypassDomestic);
+                string host=new Uri(link).Host;
+                bool douyin=Arguments.HostMatches(host,"douyin.com","iesdouyin.com");
+                bool xhs=Arguments.HostMatches(host,"xiaohongshu.com","xhslink.com");
                 using(var copy=new CookieCopy(cookies))
                 {
-                    var result=await engine.Run(Arguments.Parse(engine.ToolsPath,link,proxy,copy.Path),token,line=>{if(!line.StartsWith("{"))job.AppendLog(line);},true);
+                    if(douyin||xhs)
+                    {
+                        job.SetState(JobState.Parsing,"正在通过网页解析作品");
+                        try
+                        {
+                            job.Parsed(await ResolvePlatform(douyin?"douyin.cjs":"xiaohongshu.cjs",link,effective,copy.Path,token));
+                            return;
+                        }
+                        catch(InvalidOperationException ex)
+                        {
+                            if(!xhs)throw;
+                            job.AppendLog("小红书网页解析："+ex.Message+"；正在尝试 yt-dlp。");
+                        }
+                    }
+                    var args=Arguments.Parse(engine.ToolsPath,link,effective,copy.Path);
+                    SetConnection(args,link,bypassDomestic,copy.Path);
+                    var result=await engine.Run(args,token,null,true);
                     if(result.Code!=0)throw new InvalidOperationException(result.Error);
+                    if(result.Error.Length>0)job.AppendLog(result.Error);
                     job.Parsed(MediaInfo.FromJson(result.Output,link));
                 }
             },token);
@@ -112,7 +136,64 @@ namespace LinkHarbor
             foreach(var job in jobs.Where(j=>j.Media!=null))
                 if(!identities.Add(job.Media.Identity))job.SetState(JobState.Duplicate,"与本批次另一条链接指向同一视频，已跳过");
         }
-        public async Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string cookies,string mode,int height,CancellationToken token,string codec="original")
+
+        static void SetConnection(List<string> args,string link,bool bypassDomestic,string cookieFile)
+        {
+            if(bypassDomestic && Arguments.IsDomestic(link))args.InsertRange(0,new[]{"--proxy",""});
+            if(!String.IsNullOrEmpty(cookieFile)||!Arguments.HostMatches(new Uri(link).Host,"bilibili.com","b23.tv"))return;
+            string browser;
+            if(AppPaths.BrowserExecutable(out browser)==null)return;
+            string profile=Path.Combine(AppPaths.BrowserProfilePath,browser,"Default");
+            if(File.Exists(Path.Combine(profile,"Network","Cookies")) && File.Exists(Path.Combine(AppPaths.BrowserProfilePath,"bilibili-login")))
+                args.InsertRange(0,new[]{"--cookies-from-browser",browser+":"+profile});
+        }
+
+        async Task<MediaInfo> ResolvePlatform(string script,string url,string proxy,string cookiePath,CancellationToken token)
+        {
+            string effective=proxy.Trim();
+            if(effective.Length>0)
+            {
+                Uri uri;
+                if(!Uri.TryCreate(effective,UriKind.Absolute,out uri)||uri.UserInfo.Length>0)
+                    throw new InvalidOperationException("网页解析需要有效且不含用户名密码的代理地址。");
+                if(uri.Scheme=="socks5h")effective="socks5"+effective.Substring(7);
+            }
+            await BrowserLock.WaitAsync(token).ConfigureAwait(false);
+            string importRoot=null;
+            try
+            {
+                using(AppPaths.LockBrowserProfile())
+                {
+                    if(!String.IsNullOrEmpty(cookiePath))
+                        importRoot=Path.Combine(Path.GetTempPath(),"linkharbor-import-"+Guid.NewGuid().ToString("N"));
+                    var args=new List<string>{Path.Combine(engine.ToolsPath,script),url,importRoot??AppPaths.BrowserProfilePath,effective,cookiePath};
+                    var result=await engine.RunTool("node.exe",args,token,null,true).ConfigureAwait(false);
+                    if(result.Code!=0)throw new InvalidOperationException(result.Error.Trim());
+                    var parsed=Json.Parse(result.Output);
+                    string jar=Json.Text(parsed,"_linkharbor_cookie_jar");
+                    parsed.Remove("_linkharbor_cookie_jar");
+                    string json=Json.Serializer().Serialize(parsed);
+                    var media=MediaInfo.FromJson(json,url);
+                    media.PreResolvedInfoJson=json;
+                    media.BrowserCookieJar=jar;
+                    return media;
+                }
+            }
+            finally
+            {
+                BrowserLock.Release();
+                if(importRoot!=null && Directory.Exists(importRoot))
+                {
+                    for(int i=0;i<5;i++)
+                    {
+                        try{Directory.Delete(importRoot,true);break;}
+                        catch(IOException){Thread.Sleep(200);}
+                        catch(UnauthorizedAccessException){Thread.Sleep(200);}
+                    }
+                }
+            }
+        }
+        public async Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string cookies,string mode,int height,CancellationToken token,string codec="original",bool bypassDomestic=true)
         {
             bool video = mode == "video";
             bool convert = video && (codec == "h264" || codec == "h265" || codec == "av1");
@@ -125,9 +206,11 @@ namespace LinkHarbor
             {
                 if(mode=="video"?!job.Media.HasVideo:!job.Media.HasAudio)throw new InvalidOperationException("此视频没有所选的媒体类型，请更改下载内容后重试。");
                 job.SetState(JobState.Downloading,"正在连接下载源");
-                using(var copy=new CookieCopy(cookies))
+                using(var copy=new CookieCopy(cookies,job.Media.BrowserCookieJar))
                 {
-                    var args=Arguments.Download(engine.ToolsPath,job.Media,folder,proxy,copy.Path,mode,height,codec);
+                    string effective=Arguments.EffectiveProxy(job.Media.Url,proxy,bypassDomestic);
+                    var args=Arguments.Download(engine.ToolsPath,job.Media,folder,effective,copy.Path,mode,height,codec);
+                    SetConnection(args,job.Media.Url,bypassDomestic,copy.Path);
                     if(jobs.Count>1)
                     {
                         // Distinct links can have the same title/id. Keep parallel output paths isolated.
@@ -136,7 +219,21 @@ namespace LinkHarbor
                         int templateIndex = args.IndexOf("-o") + 1;
                         args[templateIndex] = "[" + key + "] " + args[templateIndex];
                     }
-                    var result=await engine.Run(args,token,job.ApplyLine,false);
+                    RunResult result;
+                    if(job.Media.PreResolvedInfoJson==null)result=await engine.Run(args,token,job.ApplyLine,false);
+                    else
+                    {
+                        string infoFile=Path.Combine(Path.GetTempPath(),"linkharbor-"+Guid.NewGuid().ToString("N")+".info.json");
+                        try
+                        {
+                            File.WriteAllText(infoFile,job.Media.PreResolvedInfoJson,new UTF8Encoding(false));
+                            int end=args.IndexOf("--");
+                            args.RemoveRange(end,args.Count-end);
+                            args.AddRange(new[]{"--load-info-json",infoFile});
+                            result=await engine.Run(args,token,job.ApplyLine,false);
+                        }
+                        finally{if(File.Exists(infoFile))File.Delete(infoFile);}
+                    }
                     if (result.Code != 0)
                     {
                         if (direct && result.Error.IndexOf("requested format is not available", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -184,11 +281,17 @@ namespace LinkHarbor
         sealed class CookieCopy:IDisposable
         {
             public string Path {get;private set;}
-            public CookieCopy(string source)
+            public CookieCopy(string source,string extra=null)
             {
-                Path="";if(String.IsNullOrWhiteSpace(source))return;
+                Path="";if(String.IsNullOrWhiteSpace(source)&&String.IsNullOrEmpty(extra))return;
                 string target=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"linkharbor-"+Guid.NewGuid().ToString("N")+".txt");
-                try{File.Copy(source,target);Path=target;}
+                try
+                {
+                    if(!String.IsNullOrWhiteSpace(source)) File.Copy(source,target);
+                    else File.WriteAllText(target,"# Netscape HTTP Cookie File\n",new UTF8Encoding(false));
+                    if(!String.IsNullOrEmpty(extra))File.AppendAllText(target,"\n"+extra+"\n",new UTF8Encoding(false));
+                    Path=target;
+                }
                 catch{if(File.Exists(target))File.Delete(target);throw;}
             }
             public void Dispose(){if(Path.Length>0)try{File.Delete(Path);}catch{}}

@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -19,18 +20,78 @@ namespace LinkHarbor
         public static bool Installed { get { return File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "installed-mode")); } }
         public static string SettingsFile { get { return Path.Combine(Installed ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinkHarbor") : AppDomain.CurrentDomain.BaseDirectory, "settings.json"); } }
         public static string DefaultDownloads { get { return Path.Combine(Installed ? Environment.GetFolderPath(Environment.SpecialFolder.MyVideos) : AppDomain.CurrentDomain.BaseDirectory, Installed ? "拾链" : "下载"); } }
+        public static string BrowserProfilePath { get { return Path.Combine(Installed
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"LinkHarbor")
+            : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"data"),"browser-profile"); } }
+
+        public static FileStream LockBrowserProfile()
+        {
+            Directory.CreateDirectory(BrowserProfilePath);
+            try { return File.Open(Path.Combine(BrowserProfilePath,"session.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None); }
+            catch(IOException) { throw new IOException("专用浏览器正在使用，请关闭授权窗口或稍后重试。"); }
+        }
+
+        public static string BrowserExecutable(out string browser)
+        {
+            foreach(string name in new[]{"chrome","edge"})
+            foreach(var root in new[]{Environment.SpecialFolder.ProgramFiles,Environment.SpecialFolder.ProgramFilesX86,Environment.SpecialFolder.LocalApplicationData})
+            {
+                string exe=Path.Combine(Environment.GetFolderPath(root),name=="chrome"?@"Google\Chrome\Application\chrome.exe":@"Microsoft\Edge\Application\msedge.exe");
+                if(File.Exists(exe)){browser=name;return exe;}
+            }
+            browser=null;return null;
+        }
     }
 
     public sealed class Settings
     {
         public string Folder { get; set; }
         public string Proxy { get; set; }
-        public Settings() { Folder = AppPaths.DefaultDownloads; Proxy = ""; }
+        public string CookieFile { get; set; }
+        public bool BypassProxyForDomestic { get; set; }
+        public Settings() { Folder = AppPaths.DefaultDownloads; Proxy = ""; BypassProxyForDomestic = true; }
+
+        public static Settings Read(string path)
+        {
+            if (!File.Exists(path)) return new Settings();
+            string json = File.ReadAllText(path, Encoding.UTF8);
+            try { return Json.Serializer().Deserialize<Settings>(json) ?? new Settings(); }
+            catch (ArgumentException) { return new Settings(); }
+            catch (InvalidOperationException) { return new Settings(); }
+        }
+
+        public static void Update(string path, Action<Settings> change)
+        {
+            // Each window updates only the fields it owns. Closing an older window
+            // must not restore a cookie binding cleared in another window.
+            using (var mutex = new Mutex(false, @"Local\LinkHarbor.Settings"))
+            {
+                try { if (!mutex.WaitOne(3000)) throw new IOException("其他窗口正在保存设置，请重试。"); }
+                catch (AbandonedMutexException) { } // This thread now owns the mutex.
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    var settings = Read(path);
+                    change(settings);
+                    string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                    try
+                    {
+                        File.WriteAllText(temp, Json.Serializer().Serialize(settings), Encoding.UTF8);
+                        if (File.Exists(path)) File.Replace(temp, path, null);
+                        else File.Move(temp, path);
+                    }
+                    finally { if (File.Exists(temp)) File.Delete(temp); }
+                }
+                finally { mutex.ReleaseMutex(); }
+            }
+        }
     }
 
     public sealed class MediaInfo
     {
         public string Url, Title, Author, Identity;
+        internal string PreResolvedInfoJson { get; set; }
+        internal string BrowserCookieJar { get; set; }
         public double Duration;
         public bool HasAudio, HasVideo, Live;
         public List<int> Heights = new List<int>();
@@ -38,9 +99,17 @@ namespace LinkHarbor
         public static MediaInfo FromJson(string json, string url)
         {
             var d = Json.Parse(json);
-            if (Json.Text(d, "_type") == "playlist" || d.ContainsKey("entries"))
-                throw new InvalidOperationException("此链接是播放列表或频道，请改用其中各个视频的页面链接。");
+            bool unwrapped=Json.Text(d,"_type")=="playlist" || d.ContainsKey("entries");
+            if(unwrapped)
+            {
+                object entries;
+                var list=d.TryGetValue("entries",out entries)?entries as IList:null;
+                d=list!=null && list.Count>0 ? list[0] as Dictionary<string,object> : null;
+                if(d==null || (!d.ContainsKey("formats") && String.IsNullOrEmpty(Json.Text(d,"url"))) || Json.Text(d,"_type").StartsWith("url"))
+                    throw new InvalidOperationException("播放列表中没有可用的媒体条目，请粘贴具体作品链接。");
+            }
             var info = new MediaInfo { Url = url, Title = Json.Text(d, "title"), Author = Json.Text(d, "uploader"), Duration = Json.Number(d, "duration"), Live = Json.Text(d, "live_status") == "is_live" };
+            if(unwrapped)info.PreResolvedInfoJson=Json.Serializer().Serialize(d);
             string extractor=Json.Text(d,"extractor_key"),id=Json.Text(d,"id");
             info.Identity=String.IsNullOrEmpty(extractor)||extractor.Equals("Generic",StringComparison.OrdinalIgnoreCase)||String.IsNullOrEmpty(id)?url:extractor+":"+id;
             if (info.Live) throw new InvalidOperationException("这是正在直播的内容，请在直播结束后下载回放。");
@@ -115,11 +184,57 @@ namespace LinkHarbor
         }
         public static List<string> SplitLinks(string value)
         {
-            var links=new List<string>();var seen=new HashSet<string>(StringComparer.Ordinal);
-            foreach(string part in value.Split(new[]{'\r','\n',';','；'},StringSplitOptions.RemoveEmptyEntries))
-            {string link=part.Trim();if(link.Length>0&&seen.Add(link))links.Add(link);}
-            if(links.Count==0)throw new ArgumentException("请输入视频链接；多个链接可用回车换行或分号分隔。");
+            var links = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            value = value ?? "";
+            bool shareText = DomesticLink.IsMatch(value);
+            if(shareText)value=Regex.Replace(value,@"\[https?\\?://[^\]\s]+\]\((https?\\?://[^\s]+?)\)(?=\s|$|[\u4e00-\u9fff])","$1",RegexOptions.IgnoreCase);
+            var parts = shareText ? Regex.Split(value, @"[\r\n；]+|;(?=\s*https?\\?://)", RegexOptions.IgnoreCase)
+                : value.Split(new[] { '\r', '\n', ';', '；' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string part in parts)
+            {
+                string entry = part.Trim();
+                if (entry.Length == 0) continue;
+                if (shareText)
+                {
+                    entry = DouyinShortCode.Replace(entry, m => m.Value.Replace(@"\_", "_").Replace(@"\-", "-"));
+                    foreach (Match match in SharedLink.Matches(entry))
+                    {
+                        string link = match.Groups["scheme"].Value + "://" + match.Groups["address"].Value;
+                        if (seen.Add(link)) links.Add(link);
+                    }
+                }
+                else
+                {
+                    if (seen.Add(entry)) links.Add(entry);
+                }
+            }
+            if (links.Count == 0) throw new ArgumentException("没有识别到视频链接。请粘贴完整的分享文案或 http(s) 视频链接。");
             return links;
+        }
+        static readonly Regex DomesticLink = new Regex(@"https?\\?://(?:[\w-]+\.)*(?:douyin\.com|iesdouyin\.com|xiaohongshu\.com|xhslink\.com|bilibili\.com|b23\.tv)/",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        // Undo Markdown escapes only inside a Douyin short code, before locating the end of the link.
+        static readonly Regex DouyinShortCode = new Regex(@"https?\\?://v\.douyin\.com/(?:[a-z0-9_-]|\\[_-])+",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        // Share text can contain a Markdown-escaped colon, or Chinese text directly after a short link.
+        static readonly Regex SharedLink = new Regex(
+            @"(?<scheme>https?)\\?://(?<address>[^\s\u4e00-\u9fff\uD800-\uDFFF；，。！？、【】（）「」《》“”]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        public static bool HostMatches(string host, params string[] domains)
+        {
+            return domains.Any(domain => host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase));
+        }
+        public static bool IsDomestic(string url)
+        {
+            Uri uri;
+            return Uri.TryCreate(url, UriKind.Absolute, out uri) && HostMatches(uri.Host, "douyin.com","iesdouyin.com",
+                "xiaohongshu.com","xhslink.com","xhscdn.com","bilibili.com","b23.tv","hdslb.com");
+        }
+        public static string EffectiveProxy(string url, string configuredProxy, bool bypassDomestic = true)
+        {
+            return bypassDomestic && IsDomestic(url) ? "" : configuredProxy ?? "";
         }
         public static List<string> Common(string tools, string proxy, string cookies)
         {
@@ -196,14 +311,14 @@ namespace LinkHarbor
         public Engine(string toolsPath) { ToolsPath = toolsPath; }
         public void Check()
         {
-            foreach (string file in new[] { "yt-dlp.exe", "node.exe", "ffmpeg.exe", "ffprobe.exe" })
+            foreach (string file in new[] { "yt-dlp.exe", "node.exe", "ffmpeg.exe", "ffprobe.exe", "douyin.cjs", "xiaohongshu.cjs", "browser-media.cjs" })
                 if (!File.Exists(Path.Combine(ToolsPath, file))) throw new FileNotFoundException("缺少组件 tools\\" + file + "。请保留整个工具文件夹，不要单独移动启动程序。");
         }
         public Task<RunResult> Run(List<string> args, CancellationToken token, Action<string> onLine, bool capture)
         { return RunTool("yt-dlp.exe",args,token,onLine,capture); }
         public Task<RunResult> RunTool(string tool,List<string> args,CancellationToken token,Action<string> onLine,bool capture)
         {
-            if(tool!="yt-dlp.exe"&&tool!="ffmpeg.exe"&&tool!="ffprobe.exe")throw new ArgumentException("不支持的处理组件");
+            if(tool!="yt-dlp.exe"&&tool!="ffmpeg.exe"&&tool!="ffprobe.exe"&&tool!="node.exe")throw new ArgumentException("不支持的处理组件");
             return Task.Run(() =>
             {
                 token.ThrowIfCancellationRequested();

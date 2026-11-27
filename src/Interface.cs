@@ -31,6 +31,57 @@ namespace LinkHarbor
             var b=new SoftButton{Text=text,Primary=primary,Symbol=icon,Font=TextFont(9,primary),AccessibleName=String.IsNullOrEmpty(text)?icon:text};Place(b,x,y,w,h);p.Controls.Add(b);return b;
         }
         Card MakeCard(Control p){var c=new Card();p.Controls.Add(c);return c;}
+        const string CookieDropHint = "可将 Netscape 格式的 .txt 文件拖到此处";
+
+        void SetCookieFile(string path)
+        {
+            ShowCookieBinding(path);
+            if (diagnostics) return;
+            try { Settings.Update(settingsFile, s => s.CookieFile = path.Length == 0 ? null : path); }
+            catch (Exception ex)
+            {
+                cookieLabel.Text = path.Length == 0 ? "本次已清除，但未能清除保存的绑定。" : "本次已绑定，但未能记住文件路径。";
+                tips.SetToolTip(cookieLabel, cookieLabel.Text);
+                AppendLog(cookieLabel.Text + " " + ex.Message);
+            }
+        }
+
+        void ShowCookieBinding(string path)
+        {
+            cookies = path;
+            cookieLabel.Text = path.Length == 0 ? CookieDropHint : "已绑定：" + Path.GetFileName(path);
+            tips.SetToolTip(cookieLabel, cookieLabel.Text);
+        }
+
+        void EnableCookieDrop(Control control)
+        {
+            control.AllowDrop = true;
+            control.DragEnter += CookieFileDrag;
+            control.DragDrop += CookieFileDrop;
+            foreach (Control child in control.Controls) EnableCookieDrop(child);
+        }
+
+        string DroppedCookieFile(DragEventArgs e)
+        {
+            if (busy || (e.AllowedEffect & DragDropEffects.Copy) == 0 || e.Data == null) return null;
+            var files = e.Data.GetData(DataFormats.FileDrop, false) as string[];
+            if (files == null || files.Length != 1 || !File.Exists(files[0]) ||
+                !files[0].EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) return null;
+            return files[0];
+        }
+
+        void CookieFileDrag(object sender, DragEventArgs e)
+        {
+            e.Effect = DroppedCookieFile(e) == null ? DragDropEffects.None : DragDropEffects.Copy;
+        }
+
+        void CookieFileDrop(object sender, DragEventArgs e)
+        {
+            string path = DroppedCookieFile(e);
+            e.Effect = path == null ? DragDropEffects.None : DragDropEffects.Copy;
+            if (path != null) SetCookieFile(path);
+        }
+
         TextBox TextAt(Control p,string placeholder,bool readOnly=false,bool multiline=false)
         {
             var box=MakeCard(p);box.Radius=15;box.FillColor=Color.White;
@@ -94,8 +145,8 @@ namespace LinkHarbor
 
             inputCard=MakeCard(body);
             var linkTitle=LabelAt(inputCard,"添加视频链接",22,12,125,25,10,Ink,true);
-            var linkNote=LabelAt(inputCard,"以回车换行或者；分割链接进行多视频同时下载",150,14,600,23,8.5f,Muted,false);
-            url=TextAt(inputCard,"粘贴视频链接，每行一个，也可使用 ; 或 ； 分隔",false,true);
+            var linkNote=LabelAt(inputCard,"支持抖音、小红书、B站分享文案，多条用换行或分号分隔",150,14,600,23,8.5f,Muted,false);
+            url=TextAt(inputCard,"粘贴视频链接或整段分享文案",false,true);
             var clearLink=ButtonAt(inputCard,"清除",0,0,76,40,false);clearLink.Name="ClearLink";
             parse=ButtonAt(inputCard,"解析链接",0,0,132,44,true,"arrow");
             inputCard.Resize+=(s,e)=>{float w=inputCard.Width/uiScale;Place(url.Parent,20,42,w-255,62);Place(clearLink,w-223,53,75,40);Place(parse,w-140,53,120,40);Place(linkNote,150,14,w-172,23);};
@@ -141,26 +192,66 @@ namespace LinkHarbor
 
             networkCard=MakeCard(body);network=networkCard;
             LabelAt(networkCard,"网络与登录",22,14,200,27,11,Ink,true);
-            var optional=LabelAt(networkCard,"按需设置",0,22,80,24,8,Muted,false);optional.TextAlign=ContentAlignment.MiddleRight;
+            var optional=ButtonAt(networkCard,"网页登录授权",0,12,106,32,false);
+            var sites=new ContextMenuStrip();
+            foreach(string name in new[]{"抖音","小红书","哔哩哔哩"})
+            {
+                string site=name;
+                sites.Items.Add(name,null,async (s,e)=>await AuthorizeSite(site));
+            }
+            optional.Click+=(s,e)=>sites.Show(optional,0,optional.Height);
+            optional.Disposed+=(s,e)=>sites.Dispose();
+            editable.Add(optional);
+            bypassDomestic=new CheckBox{Text="国内网站（抖音/B站/小红书）直连不走代理",Font=TextFont(8),BackColor=Color.Transparent,AutoSize=true};
+            networkCard.Controls.Add(bypassDomestic);
+            Place(bypassDomestic,22,161,310,25);
             proxy=TextAt(networkCard,"代理（可选）  http://127.0.0.1:7890");
             cookiesButton=ButtonAt(networkCard,"选择 Cookie 文件",22,100,160,34,false);
             clearCookies=ButtonAt(networkCard,"清除",190,100,65,34,false);
-            cookieLabel=LabelAt(networkCard,"未使用登录信息 · Netscape .txt",23,158,450,20,8,Muted,false);
+            cookieLabel=LabelAt(networkCard,CookieDropHint,23,158,450,20,8,Muted,false);
             var cookieHelp=ButtonAt(networkCard,"如何获取？",0,115,106,36,false);cookieHelp.Click+=(s,e)=>ShowNetworkHelp();
-            networkCard.Resize+=(s,e)=>{float w=networkCard.Width/uiScale;Place(optional,w-102,18,80,24);Place(proxy.Parent,20,51,w-40,40);Place(cookieHelp,w-126,100,106,34);Place(cookieLabel,23,140,w-46,22);};
-            cookiesButton.Click+=(s,e)=>{using(var picker=new OpenFileDialog{Title="选择 Netscape 格式 Cookie 文件",Filter="Cookie 文本文件|*.txt|所有文件|*.*"})if(picker.ShowDialog(this)==DialogResult.OK){cookies=picker.FileName;cookieLabel.Text="已选择："+Path.GetFileName(cookies);tips.SetToolTip(cookieLabel,cookieLabel.Text);}};
-            clearCookies.Click+=(s,e)=>{cookies="";cookieLabel.Text="未使用登录信息 · Netscape .txt";tips.SetToolTip(cookieLabel,"");};
+            networkCard.Resize+=(s,e)=>{float w=networkCard.Width/uiScale;Place(optional,w-126,12,106,32);Place(proxy.Parent,20,51,w-40,40);Place(cookieHelp,w-126,100,106,34);Place(cookieLabel,23,140,w-46,22);};
+            cookiesButton.Click+=(s,e)=>{using(var picker=new OpenFileDialog{Title="选择 Netscape 格式 Cookie 文件",Filter="Cookie 文本文件|*.txt|所有文件|*.*"})if(picker.ShowDialog(this)==DialogResult.OK)SetCookieFile(picker.FileName);};
+            clearCookies.Click+=(s,e)=>SetCookieFile("");
+            EnableCookieDrop(networkCard);
             proxy.Leave+=(s,e)=>SaveSettings();
 
             footer=LabelAt(body,"本地保存  ·  原始画质  ·  自动合并音视频",2,0,600,24,8,Muted,false);
             var localBadge=LabelAt(body,"POWERED BY YT-DLP",0,0,180,24,7.5f,Muted,false);localBadge.Font=new Font("Segoe UI",7.5f);localBadge.TextAlign=ContentAlignment.MiddleRight;
             body.Resize+=(s,e)=>{Place(localBadge,body.Width/uiScale-180,body.Height/uiScale-27,180,24);};
             log=new TextBox{Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=new Font("Consolas",10),BackColor=Color.White,ForeColor=Ink,BorderStyle=BorderStyle.None,Dock=DockStyle.Fill,MaxLength=0};
-            editable.AddRange(new Control[]{url,clearLink,parse,mode,quality,videoCodec,browse,proxy,cookiesButton,clearCookies});
+            editable.AddRange(new Control[]{url,clearLink,parse,mode,quality,videoCodec,browse,proxy,cookiesButton,clearCookies,bypassDomestic});
             LayoutShell();LayoutWorkspace();
             Shown+=(s,e)=>{ApplyCorners();LayoutShell();LayoutWorkspace();};
         }
 
+        async System.Threading.Tasks.Task AuthorizeSite(string site)
+        {
+            string url=site=="抖音"?"https://www.douyin.com/":site=="小红书"?"https://www.xiaohongshu.com/":"https://www.bilibili.com/";
+            try
+            {
+                using(AppPaths.LockBrowserProfile())
+                {
+                    string browser;
+                    string exe=AppPaths.BrowserExecutable(out browser);
+                    if(exe==null)throw new InvalidOperationException("请先安装 Edge 或 Chrome。");
+                    string profile=Path.Combine(AppPaths.BrowserProfilePath,browser);
+                    string route=Arguments.EffectiveProxy(url,proxy.Text,bypassDomestic.Checked);
+                    if(route.Length>0 && (!Uri.IsWellFormedUriString(route,UriKind.Absolute) || new Uri(route).UserInfo.Length>0))
+                        throw new InvalidOperationException("网页登录需要有效且不含用户名密码的代理地址。");
+                    string args="--no-first-run --no-default-browser-check --disable-background-mode "+
+                        Arguments.Quote("--user-data-dir="+profile)+" "+(route.Length==0?"--no-proxy-server":Arguments.Quote("--proxy-server="+route))+" "+url;
+                    using(var proc=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe,args){UseShellExecute=false}))
+                    {
+                        SetStatus("网页登录","请在专用浏览器中登录"+site+"，关闭浏览器窗口后再解析。");
+                        await System.Threading.Tasks.Task.Run(()=>proc.WaitForExit());
+                        if(site=="哔哩哔哩")File.WriteAllText(Path.Combine(AppPaths.BrowserProfilePath,"bilibili-login"),browser);
+                    }
+                }
+                if(!IsDisposed)SetStatus("授权窗口已关闭","可以粘贴作品链接并解析。");
+            }
+            catch(Exception ex){if(!IsDisposed)MessageBox.Show(this,ex.Message,"网页登录授权");}
+        }
         SoftButton Rail(string icon,string title,int y)
         {
             var b=ButtonAt(surface,"",20,y,40,40,false,icon);b.AccessibleName=title;tips.SetToolTip(b,title);return b;
@@ -186,18 +277,18 @@ namespace LinkHarbor
             try
             {
                 float w=workspace.ClientSize.Width/uiScale-4;bool compact=w<860;
-                float contentHeight=compact?1026:628;
+                float contentHeight=compact?1054:656;
                 body.SetBounds(0,workspace.AutoScrollPosition.Y,S(w),S(contentHeight));
                 Place(hero,2,0,w-4,80);Place(inputCard,0,82,w,112);
                 if(compact)
                 {
                     Place(mediaCard,0,210,w,200);Place(transferCard,0,426,w,200);
-                    Place(saveCard,0,642,w,168);Place(networkCard,0,826,w,168);contentHeight=1026;
+                    Place(saveCard,0,642,w,168);Place(networkCard,0,826,w,196);
                 }
                 else
                 {
                     float left=(w-18)*.57f;Place(mediaCard,0,210,left,200);Place(transferCard,left+18,210,w-left-18,200);
-                    float half=(w-18)*.48f;Place(saveCard,0,426,half,168);Place(networkCard,half+18,426,w-half-18,168);
+                    float half=(w-18)*.48f;Place(saveCard,0,426,half,196);Place(networkCard,half+18,426,w-half-18,196);
                 }
                 body.Height=S(contentHeight);Place(footer,2,contentHeight-27,w-200,24);
             }
@@ -304,7 +395,7 @@ namespace LinkHarbor
                 extension.Visible=cookie;chromium.Visible=browser;firefox.Visible=browser;
                 heading.Text=cookie?"导出当前网站的登录信息":"找到代理软件的本地监听地址";
                 instructions.Text=cookie?
-                    "1. 安装适合浏览器的 Cookie 导出插件，见“浏览器插件”页。\r\n\r\n2. 打开视频网站，登录自己的账号，进入视频页面确认可播放。\r\n\r\n3. 点击插件，导出当前网站的 Netscape 格式 .txt 文件。\r\n    Chrome / Edge 选择 Netscape → Export；无需导出全部网站。\r\n\r\n4. 在下载器点击“选择 Cookie 文件”，导入保存的 .txt，\r\n    然后重新解析链接。换网站时选用对应网站的 Cookie。":
+                    "1. 安装适合浏览器的 Cookie 导出插件，见“浏览器插件”页。\r\n\r\n2. 打开视频网站，登录自己的账号，进入视频页面确认可播放。\r\n\r\n3. 点击插件，导出当前网站的 Netscape 格式 .txt 文件。\r\n    Chrome / Edge 选择 Netscape → Export；无需导出全部网站。\r\n\r\n4. 把 .txt 拖到“网络与登录”，或点击“选择 Cookie 文件”。\r\n    看到文件名后重新解析链接。换网站时选用对应网站的 Cookie。":
                     "1. 打开你使用的代理软件，在设置中找“端口”或“本地监听”。\r\n    记录 HTTP 端口或混合端口（Mixed Port）。\r\n\r\n2. 若地址为 127.0.0.1、端口为 7897，在下载器填写：\r\n    http://127.0.0.1:7897（端口必须换成你实际看到的值）\r\n\r\n3. 也可查看 Windows 设置 → 网络和 Internet → 代理，\r\n    在手动代理设置中查看地址和端口；未启用时可能为空。\r\n\r\n4. 只有 SOCKS5 端口时，填写 socks5://127.0.0.1:实际端口。\r\n    下载期间保持代理软件运行；不需要代理可以留空。";
                 note.Text=cookie?"Cookie 是登录凭证，请勿分享；登录失效后请重新登录并导出。":"这里需要代理监听地址，不是订阅链接、远程服务器端口或管理 API 地址。";
                 if(browser)

@@ -16,6 +16,19 @@ class BatchTests
     {
         var split=Arguments.SplitLinks(" https://example.com/a?x=1&b=2\r\nhttps://example.com/b；https://example.com/c;https://example.com/a?x=1&b=2;\n ");
         Check(split.Count==3&&split[0].EndsWith("?x=1&b=2"),"newline, both semicolons, whitespace and duplicate links");
+        const string shortLink = "https://v.douyin.com/Example01/";
+        const string caption = @"[1.23 :6pm 06/04 trr:/ t@e.Ok 示例作品 # 分享  https\://v.douyin.com/Example01/ 复制此链接，打开Dou音搜索，直接观看视频！]";
+        Check(Arguments.SplitLinks(caption).SequenceEqual(new[]{shortLink}), "extract only the URL from the complete escaped Douyin share");
+        const string escapedShare = @"[7.41 oDu:/ :6pm i@P.kP 12/11 示例作品 # 分享  https\://v.douyin.com/\_Example02/ 复制此链接，打开Dou音搜索，直接观看视频！]";
+        const string escapedLink = "https://v.douyin.com/_Example02/";
+        Check(Arguments.SplitLinks(escapedShare + "\n" + escapedLink).SequenceEqual(new[]{escapedLink}),
+            "restore escaped leading underscore from full Douyin caption and deduplicate");
+        Check(Arguments.SplitLinks(@"看 https://v.douyin.com/a\_b\-c/复制此链接").Single() == "https://v.douyin.com/a_b-c/",
+            "restore escapes inside short code before adjacent caption text");
+        Check(Arguments.SplitLinks(caption + "\r\n" + shortLink + "复制此链接；分享【https://v.douyin.com/Next/】\nhttps://example.com/watch?v=2&list=3")
+            .SequenceEqual(new[]{shortLink, "https://v.douyin.com/Next/", "https://example.com/watch?v=2&list=3"}), "mixed share texts, punctuation, bare URL and deduplication");
+        Check(Arguments.SplitLinks("作品标题\nhttps://www.douyin.com/user/self?modal_id=123&showTab=like\n复制此链接").Single()
+            == "https://www.douyin.com/user/self?modal_id=123&showTab=like", "multiline caption preserves work URL query");
         bool empty=false;try{Arguments.SplitLinks(" ;；\r\n ");}catch(ArgumentException){empty=true;}Check(empty,"empty batch rejected");
         var progress=new BatchJob(1,"https://example.com");progress.ResetDownload();
         progress.ApplyLine("__STREAMS__[{\"format_id\":\"v\"},{\"format_id\":\"a\"}]");

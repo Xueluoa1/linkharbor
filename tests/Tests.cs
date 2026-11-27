@@ -33,6 +33,21 @@ class Tests
         var info = MediaInfo.FromJson(fixture, "https://example.com/watch");
         Check(info.HasAudio && info.HasVideo && info.Heights.SequenceEqual(new[] { 1080, 720 }), "parse real format list, exclude DRM");
         Check(info.FormatCount == 3, "format count excludes DRM");
+        var page = MediaInfo.FromJson("{\"_type\":\"playlist\",\"entries\":["+fixture+"]}", "https://www.bilibili.com/video/BVdemo?p=2");
+        Check(page.Title==info.Title && page.Heights.SequenceEqual(info.Heights) && page.PreResolvedInfoJson!=null, "playlist entry retains selected formats for download");
+        string proxy="http://127.0.0.1:7890";
+        Check(new Settings().BypassProxyForDomestic && new[]{"v.douyin.com","www.iesdouyin.com","xhslink.com","www.xiaohongshu.com","v.xhscdn.com","b23.tv","m.bilibili.com","upos.hdslb.com"}
+            .All(h=>Arguments.EffectiveProxy("https://"+h+"/",proxy)==""), "domestic domains bypass proxy by default");
+        Check(Arguments.EffectiveProxy("https://youtube.com/",proxy)==proxy && Arguments.EffectiveProxy("https://douyin.com.example.org/",proxy)==proxy &&
+            Arguments.EffectiveProxy("https://www.bilibili.com/",proxy,false)==proxy, "proxy toggle and exact domain boundaries");
+        var shareUrls=new[]{"https://v.douyin.com/test/","https://www.douyin.com/note/123","https://www.iesdouyin.com/share/video/123/",
+            "https://m.douyin.com/video/123","https://www.douyin.com/jingxuan?modal_id=123","https://xhslink.com/a/demo",
+            "https://www.xiaohongshu.com/discovery/item/abc?xsec_token=a%2Fb+=&xsec_source=share",
+            "https://b23.tv/demo","https://www.bilibili.com/video/BVdemo?p=2"};
+        Check(Arguments.SplitLinks(String.Join("\n",shareUrls.Select(u=>"推荐【"+u+"】复制打开📱"))).SequenceEqual(shareUrls),"domestic share text preserves tokens and selected part");
+        string signed="https://www.xiaohongshu.com/explore/abc?xsec_token=a)b;z[0]&xsec_source=share";
+        Check(Arguments.SplitLinks("分享 "+signed+"复制").Single()==signed &&
+            Arguments.SplitLinks("["+shareUrls[0]+"]("+shareUrls[0]+") 复制").Single()==shareUrls[0],"preserve query punctuation and unwrap Markdown links");
         Check(MediaInfo.FromJson("{\"formats\":[{\"ext\":\"mp4\"}]}", "https://example.com").HasVideo, "generic video without codec metadata");
         bool rejectPlaylist = false; try { MediaInfo.FromJson("{\"_type\":\"playlist\",\"entries\":[]}", "https://example.com"); } catch (InvalidOperationException) { rejectPlaylist = true; }
         Check(rejectPlaylist, "reject playlist");

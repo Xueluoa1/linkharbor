@@ -74,6 +74,7 @@ namespace LinkHarbor
         TextBox url, folder, proxy, log;
         Label mediaTitle, mediaMeta, status, detail, percent, cookieLabel, modeHint;
         Button parse, download, cancel, browse, cookiesButton, clearCookies;
+        CheckBox bypassDomestic;
         ChoiceBox quality, mode, videoCodec;
         Meter meter;
         Panel network;
@@ -183,18 +184,24 @@ namespace LinkHarbor
         void LoadSettings()
         {
             Settings settings = new Settings();
-            try { if (File.Exists(settingsFile)) settings = Json.Serializer().Deserialize<Settings>(File.ReadAllText(settingsFile, System.Text.Encoding.UTF8)) ?? settings; } catch { }
+            try { settings = Settings.Read(settingsFile); } catch (Exception ex) { AppendLog("设置读取失败：" + ex.Message); }
             folder.Text = !String.IsNullOrWhiteSpace(settings.Folder) && Path.IsPathRooted(settings.Folder) ? settings.Folder : new Settings().Folder; proxy.Text = settings.Proxy ?? "";
+            bypassDomestic.Checked = settings.BypassProxyForDomestic;
+            bypassDomestic.CheckedChanged += (sender, args) => SaveSettings();
+            if (!diagnostics && !String.IsNullOrEmpty(settings.CookieFile))
+            {
+                if (File.Exists(settings.CookieFile)) ShowCookieBinding(settings.CookieFile);
+                else cookieLabel.Text = "上次绑定的 Cookie 文件不可用，请重新拖入或选择。";
+            }
         }
         void SaveSettings()
         {
             if (diagnostics) return;
             try
             {
-                // Proxy credentials and Cookie paths are intentionally session-only.
+                // Keep proxy credentials in memory.
                 Uri u; string safeProxy = Uri.TryCreate(proxy.Text.Trim(), UriKind.Absolute, out u) && String.IsNullOrEmpty(u.UserInfo) ? proxy.Text.Trim() : "";
-                Directory.CreateDirectory(Path.GetDirectoryName(settingsFile));
-                File.WriteAllText(settingsFile, Json.Serializer().Serialize(new Settings { Folder = folder.Text, Proxy = safeProxy }), System.Text.Encoding.UTF8);
+                Settings.Update(settingsFile, s => { s.Folder = folder.Text; s.Proxy = safeProxy; s.BypassProxyForDomestic=bypassDomestic.Checked; });
             }
             catch (Exception ex) { AppendLog("设置未能保存：" + ex.Message); }
         }

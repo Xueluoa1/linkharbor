@@ -1,6 +1,10 @@
 # Local runtime binaries; retain dependency documentation and checksums.
 /tools/*
 !/tools/README.md
+!/tools/douyin.cjs
+!/tools/xiaohongshu.cjs
+!/tools/browser-media.cjs
+/data/browser-profile/
 !/tools/*-LICENSE.txt
 !/tools/SHA256SUMS.txt
 

@@ -38,7 +38,7 @@ namespace LinkHarbor
             var links=Arguments.SplitLinks(url.Text);parsedInput=url.Text;
             for(int i=0;i<links.Count;i++)jobs.Add(new BatchJob(i+1,links[i]));
             batchPhase="parse";RefreshBatchView();
-            try{await new BatchRunner(engine).ParseAsync(jobs,proxy.Text,cookies,token);}
+            try{await new BatchRunner(engine).ParseAsync(jobs,proxy.Text,cookies,token,bypassDomestic.Checked);}
             finally{batchPhase="";RefreshMediaSummary();RefreshTaskDialog();AppendBatchLogs();}
             int ready=jobs.Count(j=>j.Media!=null&&j.Snapshot().State!=JobState.Duplicate);
             int failed=jobs.Count(j=>j.Snapshot().State==JobState.Failed);
@@ -63,7 +63,7 @@ namespace LinkHarbor
             var q=quality.SelectedItem as Quality;
             batchPhase="download";
             string codec = new[]{"original","h264","h265","mp4-copy","av1-copy","av1"}[videoCodec.SelectedIndex];
-            try{await new BatchRunner(engine).DownloadAsync(jobs,folder.Text,proxy.Text,cookies,modeName,q==null?0:q.Height,token,codec);}
+            try{await new BatchRunner(engine).DownloadAsync(jobs,folder.Text,proxy.Text,cookies,modeName,q==null?0:q.Height,token,codec,bypassDomestic.Checked);}
             finally{RefreshBatchView();batchPhase="";AppendBatchLogs();RefreshTaskDialog();}
             var views=jobs.Select(j=>j.Snapshot()).ToList();
             int done=views.Count(j=>j.State==JobState.Complete),failed=views.Count(j=>j.State==JobState.Failed),canceled=views.Count(j=>j.State==JobState.Canceled);
