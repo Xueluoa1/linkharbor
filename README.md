@@ -1,4 +1,4 @@
-﻿# 拾链 v1.0.5
+﻿# 拾链 v1.0.6
 
 **正式版 · Windows 视频解析与批量下载工具 · 免费开源**
 
@@ -29,7 +29,7 @@
 - MP4 快速封装保留源 H.264 和 AAC。AV1 可直接下载源流或手动转码为 MP4。仅音频新增 AAC / M4A，优先保留源 AAC 音轨。
 - 独立任务弹窗显示状态、进度、速度、剩余时间、输出路径和日志。
 - 可粘贴抖音、小红书和 B 站分享文案，兼容 B 站分 P 链接。抖音和小红书网页解析需要 Edge 或 Chrome。
-- 支持专用网页登录、拖入 Netscape Cookie 文件及记住文件路径。抖音、小红书和 B 站默认直连，可按需使用应用内代理。
+- 支持专用网页登录，也可多选或拖入多个 Netscape Cookie 文件。拾链记住绑定，并按每条链接的域名匹配文件。抖音、小红书和 B 站默认直连，可按需使用应用内代理。
 - 取消全部、同名完整文件保护，以及来源允许时的断点续传。
 - 浅色工作台、可缩放布局、侧栏导航、多尺寸图标和内置网络帮助。
 
@@ -50,7 +50,7 @@ git checkout master
 .\package.ps1
 ```
 
-构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.5-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
+构建生成根目录 `拾链下载器.exe`；版本信息统一定义在 `src/AssemblyInfo.cs`。打包生成 `dist/LinkHarbor-v1.0.6-Windows-x64.zip` 和 SHA-256 清单。完整步骤见 [操作教程第 12 节](docs/使用教程.md#12-从源码构建与测试)。
 
 历史自展开 EXE 的构建脚本 `package-singlefile.ps1` 仍保留供开发者使用；当前发布仅提供安装包 EXE 和压缩包。
 
@@ -67,7 +67,7 @@ git checkout master
 | `src/` | C# 源码、统一版本信息、图标和图标生成脚本 |
 | `tests/` | 核心与批量测试、本地 HTTP 测试服务 |
 | `docs/使用教程.md` | 启动、下载、音频、批量、代理、Cookie、故障排查和升级 |
-| `docs/releases/v1.0.5.md` | 本次发布说明 |
+| `docs/releases/v1.0.6.md` | 本次发布说明 |
 | `tools/` | 依赖说明、许可证、校验清单；EXE/DLL 不提交 Git |
 | `build.ps1` / `package.ps1` | 编译与便携版打包 |
 | `check-tools.ps1` / `test-all.ps1` | 依赖校验及测试入口 |

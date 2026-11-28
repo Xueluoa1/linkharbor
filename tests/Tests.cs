@@ -26,6 +26,7 @@ class Tests
             Check(AppPaths.BrowserProfilePath == Path.Combine(Path.GetDirectoryName(AppPaths.SettingsFile),"browser-profile"), "installed browser profile shares the local settings directory");
             Check(new Settings().Folder == Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),"拾链"), "installed downloads in user videos directory");
         } finally { File.Delete(marker); }
+        CheckCookieSettings();
         Check(Arguments.ValidateUrl(" https://example.com/watch?v=1&list=2 ") == "https://example.com/watch?v=1&list=2", "trim URL without losing query");
         Reject(() => Arguments.ValidateUrl("file:///C:/Windows/win.ini"), "reject local file URLs");
         Reject(() => Arguments.ValidateUrl("--exec calc.exe"), "reject option injection");
@@ -116,5 +117,25 @@ class Tests
     {
         using (var p = Process.Start(new ProcessStartInfo(Path.Combine(tools, "ffprobe.exe"), "-v error -show_entries stream=codec_type,codec_name -of json " + Arguments.Quote(file)) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true }))
         { string result = p.StandardOutput.ReadToEnd(); p.WaitForExit(); if (p.ExitCode != 0) throw new Exception("ffprobe failed"); return result; }
+    }
+
+    static void CheckCookieSettings()
+    {
+        string file=Path.Combine(root,"cookie-settings-"+Guid.NewGuid().ToString("N")+".json");
+        try
+        {
+            File.WriteAllText(file,"{\"CookieFile\":\"old.txt\"}");
+            Check(Settings.Read(file).BoundCookieFiles().SequenceEqual(new[]{"old.txt"}),"restore legacy single-cookie binding");
+            Settings.Update(file,s=>s.UpdateCookieFiles(new[]{"second.txt","third.txt","second.txt"}));
+            Check(Settings.Read(file).BoundCookieFiles().SequenceEqual(new[]{"old.txt","second.txt","third.txt"}),"multiple bindings survive restart in insertion order");
+            Settings.Update(file,s=>s.UpdateCookieFiles(new[]{"OLD.txt"}));
+            Check(Settings.Read(file).BoundCookieFiles().SequenceEqual(new[]{"second.txt","third.txt","OLD.txt"}),"rebinding a file promotes it without duplicates");
+            Settings.Update(file,s=>s.RemoveCookieFile("THIRD.txt"));
+            Check(Settings.Read(file).BoundCookieFiles().SequenceEqual(new[]{"second.txt","OLD.txt"}),"removing one binding preserves the others and their priority on restart");
+            Settings.Update(file,s=>s.UpdateCookieFiles(new string[0]));
+            Settings.Update(file,s=>s.Proxy="");
+            Check(Settings.Read(file).BoundCookieFiles().Length==0 && Settings.Read(file).CookieFile==null,"clearing all bindings survives restart and later settings saves");
+        }
+        finally {if(File.Exists(file))File.Delete(file);}
     }
 }

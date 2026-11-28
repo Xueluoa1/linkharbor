@@ -5,7 +5,7 @@ $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Batch test compilation failed' }
 $portFile = Join-Path $PSScriptRoot 'test-output/server-port.txt'
 if (Test-Path -LiteralPath $portFile) { Remove-Item -LiteralPath $portFile }
-$server = Start-Process -FilePath (Join-Path $PSScriptRoot 'tools/node.exe') -ArgumentList 'tests/server.js' -WindowStyle Hidden -PassThru
+$server = Start-Process -FilePath (Join-Path $PSScriptRoot 'tools/node.exe') -ArgumentList 'tests/server.js --cookie-peer' -WindowStyle Hidden -PassThru
 try {
     for ($i = 0; $i -lt 100 -and -not (Test-Path -LiteralPath $portFile); $i++) { Start-Sleep -Milliseconds 50 }
     $port = (Get-Content -LiteralPath $portFile -Raw).Trim()

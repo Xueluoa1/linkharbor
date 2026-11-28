@@ -49,8 +49,29 @@ namespace LinkHarbor
         public string Folder { get; set; }
         public string Proxy { get; set; }
         public string CookieFile { get; set; }
+        public string[] CookieFiles { get; set; }
         public bool BypassProxyForDomestic { get; set; }
         public Settings() { Folder = AppPaths.DefaultDownloads; Proxy = ""; BypassProxyForDomestic = true; }
+
+        public string[] BoundCookieFiles()
+        {
+            var paths=CookieFiles ?? new[]{CookieFile};
+            return paths.Where(p=>!String.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        public void UpdateCookieFiles(string[] additions)
+        {
+            var comparer=StringComparer.OrdinalIgnoreCase;
+            CookieFiles=additions.Length==0 ? new string[0] :
+                BoundCookieFiles().Except(additions,comparer).Concat(additions.Distinct(comparer)).ToArray();
+            CookieFile=null;
+        }
+
+        public void RemoveCookieFile(string path)
+        {
+            CookieFiles=BoundCookieFiles().Where(p=>!String.Equals(p,path,StringComparison.OrdinalIgnoreCase)).ToArray();
+            CookieFile=null;
+        }
 
         public static Settings Read(string path)
         {

@@ -101,14 +101,116 @@ namespace LinkHarbor
         }
     }
 
+    internal sealed class SiteCookieFile
+    {
+        // Links can redirect between these first-party hosts. Cookie domains in the jar stay intact.
+        static readonly string[][] SiteDomains={
+            new[]{"youtube.com","youtu.be","youtube-nocookie.com"},
+            new[]{"bilibili.com","b23.tv"},
+            new[]{"douyin.com","iesdouyin.com"},
+            new[]{"xiaohongshu.com","xhslink.com"}
+        };
+        sealed class Row
+        {
+            public string Domain,Text;
+            public bool Subdomains;
+            public long Expires;
+        }
+        readonly List<Row> rows=new List<Row>();
+        static long Now { get { return (long)(DateTime.UtcNow-new DateTime(1970,1,1)).TotalSeconds; } }
+        public bool HasCookies { get { return rows.Count>0; } }
+
+        public static SortedDictionary<string,bool> ReadSites(string path)
+        {
+            var sites=new SortedDictionary<string,bool>(StringComparer.OrdinalIgnoreCase);
+            Read(path,sites);
+            return sites;
+        }
+
+        public static SiteCookieFile Read(string path)
+        {
+            return Read(path,null);
+        }
+
+        static SiteCookieFile Read(string path,IDictionary<string,bool> sites)
+        {
+            var file=new SiteCookieFile();
+            long now=Now;
+            using(var stream=File.Open(path,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete))
+            using(var reader=new StreamReader(stream,Encoding.UTF8,true))
+            {
+                string line;
+                while((line=reader.ReadLine())!=null)
+                {
+                    bool httpOnly=line.StartsWith("#HttpOnly_",StringComparison.Ordinal);
+                    if((line.StartsWith("#") && !httpOnly) || line.IndexOf('\0')>=0)continue;
+                    string[] fields=(httpOnly?line.Substring(10):line).Split('\t');
+                    if(fields.Length!=7 || !fields[2].StartsWith("/") || fields[5].Length==0)continue;
+                    bool subdomains,secure;
+                    long expires=0;
+                    if(!Boolean.TryParse(fields[1],out subdomains) || !Boolean.TryParse(fields[3],out secure) ||
+                        (fields[4].Length!=0 && !Int64.TryParse(fields[4],out expires)))continue;
+                    string domain=fields[0].TrimStart('.').ToLowerInvariant();
+                    if(Uri.CheckHostName(domain)==UriHostNameType.Unknown)continue;
+                    bool current=expires==0 || expires>now;
+                    if(sites!=null)
+                    {
+                        if(current || !sites.ContainsKey(domain))sites[domain]=current;
+                        continue;
+                    }
+                    if(!current)continue;
+                    fields[0]=(httpOnly?"#HttpOnly_":"")+(subdomains?".":"")+domain;
+                    fields[1]=subdomains?"TRUE":"FALSE"; fields[3]=secure?"TRUE":"FALSE";
+                    if(fields[4].Length==0)fields[4]="0";
+                    file.rows.Add(new Row{Domain=domain,Subdomains=subdomains,Expires=expires,Text=String.Join("\t",fields)});
+                }
+            }
+            return file;
+        }
+
+        public static List<SiteCookieFile> Load(IEnumerable<string> paths)
+        {
+            var files=new List<SiteCookieFile>();
+            foreach(string path in paths.Reverse())
+            {
+                if(!File.Exists(path))continue;
+                try { files.Add(Read(path)); }
+                catch(IOException) { } // A moved or locked export must not block other sites.
+                catch(UnauthorizedAccessException) { }
+            }
+            return files;
+        }
+
+        public static string SelectRows(string host,IEnumerable<SiteCookieFile> files)
+        {
+            var family=Array.Find(SiteDomains,domains=>Arguments.HostMatches(host,domains));
+            long now=Now;
+            foreach(var file in files)
+            {
+                var matches=file.rows.Where(row=>(row.Expires==0 || row.Expires>now) &&
+                    (family!=null ? Arguments.HostMatches(row.Domain,family) :
+                     host.Equals(row.Domain,StringComparison.OrdinalIgnoreCase) ||
+                     (row.Subdomains && row.Domain.Contains(".") && Arguments.HostMatches(host,row.Domain))));
+                string rows=String.Join("\n",matches.Select(row=>row.Text));
+                if(rows.Length>0)return rows;
+            }
+            return "";
+        }
+    }
+
     public sealed class BatchRunner
     {
         public const int ParallelLimit=3;
         readonly Engine engine;
         public BatchRunner(Engine engine){this.engine=engine;}
         static readonly SemaphoreSlim BrowserLock=new SemaphoreSlim(1,1);
-        public async Task ParseAsync(IList<BatchJob> jobs,string proxy,string cookies,CancellationToken token,bool bypassDomestic=true)
+        public Task ParseAsync(IList<BatchJob> jobs,string proxy,string cookies,CancellationToken token,bool bypassDomestic=true)
         {
+            return ParseAsync(jobs,proxy,new[]{cookies},token,bypassDomestic);
+        }
+        internal async Task ParseAsync(IList<BatchJob> jobs,string proxy,string[] cookieFiles,CancellationToken token,bool bypassDomestic=true)
+        {
+            var sources=await Task.Run(()=>SiteCookieFile.Load(cookieFiles),token).ConfigureAwait(false);
             await RunLimited(jobs,async job=>
             {
                 job.SetState(JobState.Parsing,"正在获取视频信息");
@@ -118,7 +220,7 @@ namespace LinkHarbor
                 string host=new Uri(link).Host;
                 bool douyin=Arguments.HostMatches(host,"douyin.com","iesdouyin.com");
                 bool xhs=Arguments.HostMatches(host,"xiaohongshu.com","xhslink.com");
-                using(var copy=new CookieCopy(link,cookies))
+                using(var copy=new CookieCopy(link,sources))
                 {
                     if(douyin||xhs)
                     {
@@ -198,8 +300,13 @@ namespace LinkHarbor
                 }
             }
         }
-        public async Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string cookies,string mode,int height,CancellationToken token,string codec="original",bool bypassDomestic=true)
+        public Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string cookies,string mode,int height,CancellationToken token,string codec="original",bool bypassDomestic=true)
         {
+            return DownloadAsync(jobs,folder,proxy,new[]{cookies},mode,height,token,codec,bypassDomestic);
+        }
+        internal async Task DownloadAsync(IList<BatchJob> jobs,string folder,string proxy,string[] cookieFiles,string mode,int height,CancellationToken token,string codec="original",bool bypassDomestic=true)
+        {
+            var sources=await Task.Run(()=>SiteCookieFile.Load(cookieFiles),token).ConfigureAwait(false);
             bool video = mode == "video";
             bool convert = video && (codec == "h264" || codec == "h265" || codec == "av1");
             bool direct = video && (codec == "mp4-copy" || codec == "av1-copy");
@@ -211,7 +318,7 @@ namespace LinkHarbor
             {
                 if(mode=="video"?!job.Media.HasVideo:!job.Media.HasAudio)throw new InvalidOperationException("此视频没有所选的媒体类型，请更改下载内容后重试。");
                 job.SetState(JobState.Downloading,"正在连接下载源");
-                using(var copy=new CookieCopy(job.Media.Url,cookies,job.Media.BrowserCookieJar))
+                using(var copy=new CookieCopy(job.Media.Url,sources,job.Media.BrowserCookieJar))
                 {
                     string effective=Arguments.EffectiveProxy(job.Media.Url,proxy,bypassDomestic);
                     var args=Arguments.Download(engine.ToolsPath,job.Media,folder,effective,"",mode,height,codec);
@@ -286,34 +393,27 @@ namespace LinkHarbor
         internal sealed class CookieCopy:IDisposable
         {
             public string Path {get;private set;}
-            public CookieCopy(string link,string source,string extra=null)
+            public CookieCopy(string link,IEnumerable<SiteCookieFile> sources,string extra=null)
             {
                 Path="";
-                using(var input=OpenSource(link,source))
+                string host=new Uri(link).IdnHost;
+                string rows=SiteCookieFile.SelectRows(host,sources);
+                if(rows.Length==0 && Arguments.HostMatches(host,"bilibili.com","b23.tv"))
+                    rows=SiteCookieFile.SelectRows(host,SiteCookieFile.Load(new[]{AppPaths.BilibiliCookies}));
+                if(rows.Length==0 && String.IsNullOrEmpty(extra))return;
+                string target=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"linkharbor-"+Guid.NewGuid().ToString("N")+".txt");
+                try
                 {
-                    if(input==null && String.IsNullOrEmpty(extra))return;
-                    string target=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"linkharbor-"+Guid.NewGuid().ToString("N")+".txt");
-                    try
+                    using(var output=new StreamWriter(target,false,new UTF8Encoding(false)))
                     {
-                        if(input!=null)
-                        {
-                            using(var output=File.Open(target,FileMode.CreateNew,FileAccess.Write,FileShare.None))input.CopyTo(output);
-                        }
-                        else File.WriteAllText(target,"# Netscape HTTP Cookie File\n",new UTF8Encoding(false));
-                        if(!String.IsNullOrEmpty(extra))File.AppendAllText(target,"\n"+extra+"\n",new UTF8Encoding(false));
-                        Path=target;
+                        output.NewLine="\n";
+                        output.WriteLine("# Netscape HTTP Cookie File");
+                        if(rows.Length>0)output.WriteLine(rows);
+                        if(!String.IsNullOrEmpty(extra))output.WriteLine(extra);
                     }
-                    catch{if(File.Exists(target))File.Delete(target);throw;}
+                    Path=target;
                 }
-            }
-            static FileStream OpenSource(string link,string external)
-            {
-                if(!String.IsNullOrWhiteSpace(external))return File.OpenRead(external);
-                if(!Arguments.HostMatches(new Uri(link).Host,"bilibili.com","b23.tv"))return null;
-                // An authorization window can atomically replace the saved jar while a task copies it.
-                try{return File.Open(AppPaths.BilibiliCookies,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete);}
-                catch(FileNotFoundException){return null;}
-                catch(DirectoryNotFoundException){return null;}
+                catch{if(File.Exists(target))File.Delete(target);throw;}
             }
             public void Dispose(){if(Path.Length>0)try{File.Delete(Path);}catch{}}
         }

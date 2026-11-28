@@ -81,7 +81,8 @@ namespace LinkHarbor
         MediaInfo media;
         CancellationTokenSource operation;
         Task activeTask;
-        string cookies = "", completedFile = "";
+        string[] cookieFiles = new string[0];
+        string completedFile = "";
         bool busy, closePending;
         readonly List<Control> editable = new List<Control>();
 
@@ -130,6 +131,14 @@ namespace LinkHarbor
                     try
                     {
                         folder.Text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-output", "ui-" + Guid.NewGuid().ToString("N"));
+                        Size initialSize=ClientSize;
+                        foreach(var size in new[]{new Size(760,480),new Size(1180,520),new Size(840,650),new Size(900,900),new Size(1180,748),new Size(900,680)})
+                        {
+                            ClientSize=new Size(S(size.Width),S(size.Height));
+                            PerformLayout();
+                            ValidateInterfaceLayout();
+                        }
+                        ClientSize=initialSize;
                         ValidateInterfaceLayout();
                         ValidateButtonBackgrounds();
                         url.Text = "invalid link"; parse.PerformClick(); await activeTask;
@@ -163,13 +172,11 @@ namespace LinkHarbor
                         mode.SelectedIndex = 0;
                         using (var bitmap = new Bitmap(Width, Height)) { DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size)); bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "build", "download-preview.png")); }
                         videoCodec.SelectedIndex=0;
-                        ClientSize = new Size(S(900), S(680)); PerformLayout(); workspace.PerformLayout(); LayoutWorkspace();
-                        ValidateInterfaceLayout();
-                        if(!(mediaCard.Top<transferCard.Top&&transferCard.Top<saveCard.Top&&saveCard.Top<networkCard.Top))throw new Exception("Compact layout did not stack cards");
+                        ClientSize=new Size(S(900),S(680));
                         Navigate("home");
                         using (var bitmap = new Bitmap(Width, Height)) { DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size)); bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "build", "compact-preview.png")); }
                         settingsNav.PerformClick();
-                        if(!settingsNav.Selected || !workspace.RectangleToScreen(workspace.ClientRectangle).Contains(proxy.RectangleToScreen(proxy.ClientRectangle)))throw new Exception("Settings navigation did not reveal proxy input");
+                        if(!settingsNav.Selected || !proxy.Focused || !body.RectangleToScreen(body.ClientRectangle).Contains(proxy.RectangleToScreen(proxy.ClientRectangle)))throw new Exception("Settings navigation did not focus the visible proxy input");
                         using (var bitmap = new Bitmap(Width, Height)) { DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size)); bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "build", "settings-preview.png")); }
                         taskNav.PerformClick();
                         if(!taskNav.Selected)throw new Exception("Task navigation failed");
@@ -188,11 +195,7 @@ namespace LinkHarbor
             folder.Text = !String.IsNullOrWhiteSpace(settings.Folder) && Path.IsPathRooted(settings.Folder) ? settings.Folder : new Settings().Folder; proxy.Text = settings.Proxy ?? "";
             bypassDomestic.Checked = settings.BypassProxyForDomestic;
             bypassDomestic.CheckedChanged += (sender, args) => SaveSettings();
-            if (!diagnostics && !String.IsNullOrEmpty(settings.CookieFile))
-            {
-                if (File.Exists(settings.CookieFile)) ShowCookieBinding(settings.CookieFile);
-                else cookieLabel.Text = "上次绑定的 Cookie 文件不可用，请重新拖入或选择。";
-            }
+            if (!diagnostics) ShowCookieBindings(settings.BoundCookieFiles());
         }
         void SaveSettings()
         {

@@ -3,12 +3,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../test-output/fixture');
 let active = 0, peak = 0;
-const server = http.createServer((req, res) => {
+function serve(req, res) {
   const name = path.basename(new URL(req.url, 'http://localhost').pathname);
   if (name === 'metrics') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({active, peak})); return; }
   if (name === 'reset-metrics') { peak = active; res.end('ok'); return; }
   const slow = /^slow-[a-z]+\.mp4$/.test(name);
-  const file = path.join(root, slow ? 'video.mp4' : name);
+  const cookieCheck = name === 'cookie-check.mp4';
+  if (cookieCheck && req.headers.cookie !== 'fixture=' + req.headers.host.split(':')[0]) {
+    res.writeHead(403); res.end(); return;
+  }
+  const file = path.join(root, slow || cookieCheck ? 'video.mp4' : name);
   if (!name || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end('not found'); return; }
   const size = fs.statSync(file).size;
   const mime = name.endsWith('.mpd') ? 'application/dash+xml' : name.endsWith('.mp4') ? 'video/mp4' : name.endsWith('.webm') ? 'audio/webm' : 'application/octet-stream';
@@ -29,8 +33,12 @@ const server = http.createServer((req, res) => {
     }, 100);
     res.once('close', () => { clearInterval(timer); active--; });
   } else fs.createReadStream(file, { start, end }).pipe(res);
-});
+}
+const server = http.createServer(serve);
 server.listen(0, '127.0.0.1', () => {
-  fs.writeFileSync(path.resolve(__dirname, '../test-output/server-port.txt'), String(server.address().port));
+  const port = server.address().port;
+  const ready = () => fs.writeFileSync(path.resolve(__dirname, '../test-output/server-port.txt'), String(port));
+  if (process.argv.includes('--cookie-peer')) http.createServer(serve).listen(port, '127.0.0.2', ready);
+  else ready();
   console.log(`fixture server http://127.0.0.1:${server.address().port}`);
 });

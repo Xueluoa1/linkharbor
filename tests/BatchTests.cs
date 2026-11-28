@@ -42,7 +42,8 @@ class BatchTests
         var jobs=new[]{new BatchJob(1,origin+"/video.mp4?alias=one"),new BatchJob(2,origin+"/video.mp4?alias=two"),new BatchJob(3,"invalid link")};
         string folder=Path.GetFullPath(Path.Combine("test-output","batch-"+Guid.NewGuid().ToString("N")));Directory.CreateDirectory(folder);
         string cookie=Path.Combine(folder,"fixture-cookies.txt"),cookieText="# Netscape HTTP Cookie File\r\n127.0.0.1\tFALSE\t/\tFALSE\t0\tfixture\ttest\r\n";File.WriteAllText(cookie,cookieText);
-        CheckBilibiliCookies(cookie);
+        CheckSiteCookies(folder);
+        await CheckMixedSiteDownloads(runner,origin,folder);
         await runner.ParseAsync(jobs,"",cookie,CancellationToken.None);
         Check(jobs.Count(j=>j.Snapshot().State==JobState.Ready)==2&&jobs[2].Snapshot().State==JobState.Failed,"invalid link does not block valid parses");
         await runner.DownloadAsync(jobs,folder,"",cookie,"video",0,CancellationToken.None);
@@ -119,22 +120,37 @@ class BatchTests
         Check(nonAac.Snapshot().State==JobState.Complete&&nonAac.Snapshot().File.EndsWith(".m4a"),"M4A converts a non-AAC source to validated AAC");
     }
 
-    static void CheckBilibiliCookies(string external)
+    static void CheckSiteCookies(string folder)
     {
         // This test executable lives in test-output, with its own portable profile.
         string saved=AppPaths.BilibiliCookies;
         string url="https://www.bilibili.com/video/test";
         Directory.CreateDirectory(AppPaths.BrowserProfilePath);
-        using(var empty=new BatchRunner.CookieCopy(url,""))Check(empty.Path=="","Bilibili works anonymously before login");
+        string first=Path.Combine(folder,"one.txt"),second=Path.Combine(folder,"two.txt");
+        File.WriteAllText(first,"# Netscape HTTP Cookie File\n#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tlogin\tfirst\n"+
+            ".xiaohongshu.com\tTRUE\t/\tTRUE\t0\txhs\tone\nprivate.example.org\tFALSE\t/\tTRUE\t0\thost\tonly\n");
+        File.WriteAllText(second,"# Netscape HTTP Cookie File\n#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tlogin\tnewer\n"+
+            ".bilibili.com\tTRUE\t/\tTRUE\t0\tauth\tbound\n.douyin.com\tTRUE\t/\tTRUE\t0\tdy\ttwo\n"+
+            ".xiaohongshu.com\tTRUE\t/\tTRUE\t123\texpired\told\n");
+        var sources=SiteCookieFile.Load(new[]{first,second,Path.Combine(folder,"moved.txt")});
+        var sites=SiteCookieFile.ReadSites(second);
+        Check(sites.Count==4 && sites["youtube.com"] && sites["bilibili.com"] && sites["douyin.com"] && !sites["xiaohongshu.com"],
+            "manager lists domains including HttpOnly entries and distinguishes expired sites");
+        var none=new List<SiteCookieFile>();
+        Check(SiteCookieFile.SelectRows("youtu.be",sources)=="#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tlogin\tnewer","short URL selects latest matching account and isolates cookie domains");
+        Check(SiteCookieFile.SelectRows("xhslink.com",sources).EndsWith("\txhs\tone") && SiteCookieFile.SelectRows("www.iesdouyin.com",sources).EndsWith("\tdy\ttwo"),"expired, missing and nonmatching files do not shadow usable bindings");
+        Check(SiteCookieFile.SelectRows("private.example.org",sources).EndsWith("\thost\tonly") &&
+            SiteCookieFile.SelectRows("sub.private.example.org",sources)=="" && SiteCookieFile.SelectRows("youtube.com.example.org",sources)=="","generic domains respect host-only scope and domain boundaries");
+        using(var empty=new BatchRunner.CookieCopy(url,none))Check(empty.Path=="","Bilibili works anonymously before login");
         using(var stream=new FileStream(saved,FileMode.CreateNew,FileAccess.Write))
         using(var writer=new StreamWriter(stream))writer.Write("# Netscape HTTP Cookie File\n.bilibili.com\tTRUE\t/\tTRUE\t0\tfixture\tsynthetic\n");
         try
         {
             string savedText=File.ReadAllText(saved),temporary;
-            using(var longLink=new BatchRunner.CookieCopy(url,""))
-            using(var shortLink=new BatchRunner.CookieCopy("https://b23.tv/test",null))
-            using(var explicitFile=new BatchRunner.CookieCopy(url,external))
-            using(var other=new BatchRunner.CookieCopy("https://bilibili.com.example.org/",""))
+            using(var longLink=new BatchRunner.CookieCopy(url,SiteCookieFile.Load(new[]{first})))
+            using(var shortLink=new BatchRunner.CookieCopy("https://b23.tv/test",none))
+            using(var explicitFile=new BatchRunner.CookieCopy(url,sources))
+            using(var other=new BatchRunner.CookieCopy("https://bilibili.com.example.org/",sources))
             {
                 temporary=longLink.Path;
                 Check(File.ReadAllText(temporary)==savedText && File.ReadAllText(shortLink.Path)==savedText &&
@@ -142,7 +158,7 @@ class BatchTests
                 var args=Arguments.Parse("tools",url,"","");
                 BatchRunner.SetConnection(args,url,true,temporary);
                 Check(args[args.IndexOf("--cookies")+1]==temporary && !args.Contains("--cookies-from-browser"),"Bilibili authorization is passed as a Netscape jar");
-                Check(other.Path=="" && File.ReadAllText(explicitFile.Path)==File.ReadAllText(external),"external file wins and unrelated sites receive no Bilibili cookies");
+                Check(other.Path=="" && File.ReadAllText(explicitFile.Path)=="# Netscape HTTP Cookie File\n.bilibili.com\tTRUE\t/\tTRUE\t0\tauth\tbound\n","matching external file wins and unrelated sites receive no Bilibili cookies");
                 File.AppendAllText(temporary,"# updated by a task");
             }
             Check(!File.Exists(temporary) && File.ReadAllText(saved)==savedText,"task cleanup preserves the saved Bilibili authorization");
@@ -155,5 +171,21 @@ class BatchTests
         var result = await engine.RunTool("ffmpeg.exe", new List<string>{"-v","error","-i",file,"-map","0:"+stream+":0","-c","copy","-f","hash","-"}, CancellationToken.None, null, true);
         if (result.Code!=0) throw new IOException(result.Error);
         return result.Output.Trim();
+    }
+
+    static async Task CheckMixedSiteDownloads(BatchRunner runner,string origin,string folder)
+    {
+        string peer=origin.Replace("127.0.0.1","127.0.0.2");
+        var jobs=new[]{new BatchJob(1,origin+"/cookie-check.mp4"),new BatchJob(2,peer+"/cookie-check.mp4")};
+        string[] files={Path.Combine(folder,"alpha.txt"),Path.Combine(folder,"beta.txt")};
+        for(int i=0;i<jobs.Length;i++)
+        {
+            string host=new Uri(jobs[i].Snapshot().Url).Host;
+            File.WriteAllText(files[i],"# Netscape HTTP Cookie File\n"+host+"\tFALSE\t/\tFALSE\t0\tfixture\t"+host+"\n");
+        }
+        await runner.ParseAsync(jobs,"",files,CancellationToken.None);
+        Check(jobs.All(j=>j.Snapshot().State==JobState.Ready),"mixed-site batch parses both cookie-protected HTTP fixtures: "+String.Join(" | ",jobs.Select(j=>j.Snapshot().Message)));
+        await runner.DownloadAsync(jobs,folder,"",files,"video",0,CancellationToken.None);
+        Check(jobs.All(j=>j.Snapshot().State==JobState.Complete && File.Exists(j.Snapshot().File)),"both downloads send only the cookie for their own site");
     }
 }
